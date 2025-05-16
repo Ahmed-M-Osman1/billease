@@ -1,19 +1,20 @@
 
 "use client";
 import { useBillContext } from '@/contexts/BillContext';
-import type { CalculatedPersonSummary, BillItem, CustomSharedPool } from '@/lib/types';
+import type { CalculatedPersonSummary, CustomSharedPool } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
-import { Separator } from '@/components/ui/separator';
-import { Download, ClipboardList, UserCircle, ShoppingBag, FileText, Users, Users2, Archive } from 'lucide-react';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Download, ClipboardList, FileText } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 export function SummaryDisplay() {
   const { state } = useBillContext();
   const [summaries, setSummaries] = useState<CalculatedPersonSummary[]>([]);
   const [grandTotal, setGrandTotal] = useState(0);
-  const [totalSharedAllPeopleValue, setTotalSharedAllPeopleValue] = useState(0);
-  const [customPoolSummaries, setCustomPoolSummaries] = useState<Array<{id: string; name: string; totalValue: number; numMembers: number, perPersonValue: number, personIds: string[]}>>([]);
+  
+  //Memoize the list of custom pools that have actual value assigned to them across all people
+  const [activeCustomPools, setActiveCustomPools] = useState<CustomSharedPool[]>([]);
 
 
   useEffect(() => {
@@ -24,15 +25,13 @@ export function SummaryDisplay() {
 
     if (people.length === 0) {
       setSummaries([]);
-      setTotalSharedAllPeopleValue(items.filter(item => item.assignedTo === 'SHARED_ALL_PEOPLE').reduce((sum, item) => sum + item.price, 0));
-      setCustomPoolSummaries([]);
+      setActiveCustomPools([]);
       return;
     }
 
     // Calculate SHARED_ALL_PEOPLE items
     const sharedAllPoolItems = items.filter(item => item.assignedTo === 'SHARED_ALL_PEOPLE');
     const currentTotalSharedAllPeopleValue = sharedAllPoolItems.reduce((sum, item) => sum + item.price, 0);
-    setTotalSharedAllPeopleValue(currentTotalSharedAllPeopleValue);
     const sharedAllPortionPerPerson = people.length > 0 ? currentTotalSharedAllPeopleValue / people.length : 0;
 
     // Calculate Custom Shared Pools
@@ -50,14 +49,11 @@ export function SummaryDisplay() {
         personIds: pool.personIds,
       };
     });
-    setCustomPoolSummaries(currentCustomPoolSummaries);
     
     // Determine subtotal base for tax/service charge proportions
     const ocrSubtotal = billDetails.subtotal; 
     const sumOfAllItemPrices = items.reduce((sum, item) => sum + item.price, 0);
-    // If OCR subtotal is 0 or less than sum of items, use sum of items as base. This handles cases where OCR might fail for subtotal but items are correct.
     const subtotalBaseForProportions = ocrSubtotal > 0 && ocrSubtotal >= sumOfAllItemPrices ? ocrSubtotal : sumOfAllItemPrices;
-
 
     const calculatedSummaries: CalculatedPersonSummary[] = people.map(person => {
       const personDirectItems = items.filter(item => item.assignedTo === person.id);
@@ -71,6 +67,7 @@ export function SummaryDisplay() {
           personTotalContributionToSubtotal += poolSummary.perPersonValue;
           personCustomSharedPoolContributions.push({
             poolName: poolSummary.name,
+            poolId: poolSummary.id, // Store poolId for mapping
             amount: poolSummary.perPersonValue,
           });
         }
@@ -84,7 +81,6 @@ export function SummaryDisplay() {
         personVatShare = billDetails.vat * personProportionOfSubtotalBase;
         personServiceChargeShare = billDetails.serviceCharge * personProportionOfSubtotalBase;
       } else if (people.length > 0) { 
-        // Fallback if subtotalBase is 0: distribute tax/service charge equally
         personVatShare = billDetails.vat / people.length;
         personServiceChargeShare = billDetails.serviceCharge / people.length;
       }
@@ -104,6 +100,12 @@ export function SummaryDisplay() {
     });
 
     setSummaries(calculatedSummaries);
+
+    // Update active custom pools (pools that have at least one item assigned and thus a value)
+    const activePools = customSharedPools.filter(pool => 
+        currentCustomPoolSummaries.find(cs => cs.id === pool.id && cs.totalValue > 0)
+    );
+    setActiveCustomPools(activePools);
 
   }, [state]);
 
@@ -127,9 +129,13 @@ export function SummaryDisplay() {
     );
   }
 
+  const getPersonCustomPoolShare = (personSummary: CalculatedPersonSummary, poolId: string): number => {
+    const contribution = personSummary.customSharedPoolContributions?.find(c => c.poolId === poolId);
+    return contribution ? contribution.amount : 0;
+  };
 
   return (
-    <Card className="shadow-lg mt-6 print-container">
+    <Card className="shadow-lg mt-6 summary-card-print-container">
       <CardHeader>
         <div className="flex justify-between items-start">
           <div>
@@ -137,7 +143,7 @@ export function SummaryDisplay() {
               <ClipboardList className="h-7 w-7 text-primary" />
               Final Bill Summary
             </CardTitle>
-            <CardDescription>Review each person's share of the bill.</CardDescription>
+            <CardDescription>Review each person's share of the bill. Use the button to save as PDF or print.</CardDescription>
           </div>
           <Button onClick={handleSavePrint} variant="outline" size="icon" className="print-hide">
             <Download className="h-5 w-5" />
@@ -145,140 +151,164 @@ export function SummaryDisplay() {
           </Button>
         </div>
       </CardHeader>
-      <CardContent className="space-y-6">
-        {totalSharedAllPeopleValue > 0 && state.people.length > 0 && (
-          <div className="p-4 border rounded-lg bg-muted/30">
-            <h3 className="text-md font-semibold flex items-center gap-2 text-accent-foreground">
-              <Archive className="h-5 w-5" /> Shared (All People) Total: ${totalSharedAllPeopleValue.toFixed(2)}
-            </h3>
-            <p className="text-xs text-muted-foreground">
-              (Each of the {state.people.length} person(s) will have ${(totalSharedAllPeopleValue / state.people.length).toFixed(2)} added from these items)
-            </p>
-          </div>
-        )}
-
-        {customPoolSummaries.filter(cps => cps.totalValue > 0).map(poolSummary => (
-           <div key={poolSummary.id} className="p-4 border rounded-lg bg-muted/30">
-            <h3 className="text-md font-semibold flex items-center gap-2 text-accent-foreground">
-              <Users2 className="h-5 w-5" /> Shared Group: {poolSummary.name} - Total: ${poolSummary.totalValue.toFixed(2)}
-            </h3>
-            <p className="text-xs text-muted-foreground">
-              (Split among {poolSummary.numMembers} member(s): ${poolSummary.perPersonValue.toFixed(2)} each for this group's items)
-            </p>
-          </div>
-        ))}
-
-
-        {summaries.map(summary => (
-          <div key={summary.id} className="p-4 border rounded-lg bg-card/50">
-            <h3 className="text-lg font-semibold flex items-center gap-2 text-primary">
-              <UserCircle className="h-6 w-6" /> {summary.name}
-            </h3>
-            <Separator className="my-2" />
-            {summary.items.length > 0 && (
-              <div className="mb-2">
-                <h4 className="text-sm font-medium flex items-center gap-1 mb-1"><ShoppingBag className="h-4 w-4 text-muted-foreground"/>Directly Assigned Items:</h4>
-                <ul className="list-disc list-inside pl-1 text-sm space-y-0.5">
-                  {summary.items.map(item => (
-                    <li key={item.id} className="flex justify-between">
-                      <span>{item.name}</span>
-                      <span>${item.price.toFixed(2)}</span>
-                    </li>
+      <CardContent className="summary-table-print-container">
+        {summaries.length > 0 ? (
+          <Table className="border">
+            <TableHeader>
+              <TableRow>
+                <TableHead className="font-semibold border-r w-[200px]">Breakdown Category</TableHead>
+                {summaries.map(person => (
+                  <TableHead key={person.id} className="text-center font-semibold border-r last:border-r-0">{person.name}</TableHead>
+                ))}
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              <TableRow>
+                <TableCell className="font-medium border-r">Direct Items Subtotal</TableCell>
+                {summaries.map(person => (
+                  <TableCell key={person.id} className="text-right border-r last:border-r-0">${person.itemsSubtotal.toFixed(2)}</TableCell>
+                ))}
+              </TableRow>
+              <TableRow>
+                <TableCell className="font-medium border-r">Share from "All People" Pool</TableCell>
+                {summaries.map(person => (
+                  <TableCell key={person.id} className="text-right border-r last:border-r-0">${person.sharedItemsPortionValue.toFixed(2)}</TableCell>
+                ))}
+              </TableRow>
+              {/* Rows for active custom shared pools */}
+              {activeCustomPools.map(pool => (
+                <TableRow key={pool.id}>
+                  <TableCell className="font-medium border-r">Share from "{pool.name}"</TableCell>
+                  {summaries.map(personSummary => (
+                    <TableCell key={personSummary.id} className="text-right border-r last:border-r-0">
+                      ${getPersonCustomPoolShare(personSummary, pool.id).toFixed(2)}
+                    </TableCell>
                   ))}
-                </ul>
-                 <p className="flex justify-between text-sm mt-1 pt-1 border-t border-dashed"><span>Subtotal (Direct Items):</span> <span>${summary.itemsSubtotal.toFixed(2)}</span></p>
-              </div>
-            )}
-             {summary.items.length === 0 && (
-                <p className="text-sm text-muted-foreground mb-2">No items directly assigned.</p>
-             )}
-
-            <div className="text-sm space-y-1 mt-2 pt-2 border-t border-dashed">
-              <p className="flex justify-between"><span>Share from "All People" Pool:</span> <span>${summary.sharedItemsPortionValue.toFixed(2)}</span></p>
-              {summary.customSharedPoolContributions && summary.customSharedPoolContributions.length > 0 &&
-                summary.customSharedPoolContributions.map(contrib => (
-                  <p key={contrib.poolName} className="flex justify-between"><span>Share from "{contrib.poolName}":</span> <span>${contrib.amount.toFixed(2)}</span></p>
+                </TableRow>
               ))}
-              <Separator className="my-1" />
-              <p className="flex justify-between"><span>Subtotal (Items + All Shares):</span> <span>${(summary.itemsSubtotal + summary.sharedItemsPortionValue + (summary.customSharedPoolContributions?.reduce((sum, c) => sum + c.amount, 0) || 0)).toFixed(2)}</span></p>
-              <p className="flex justify-between"><span>VAT/Tax Share:</span> <span>${summary.vatShare.toFixed(2)}</span></p>
-              <p className="flex justify-between"><span>Service Charge Share:</span> <span>${summary.serviceChargeShare.toFixed(2)}</span></p>
-              <Separator className="my-1" />
-              <p className="flex justify-between font-bold text-md">
-                <span>Total Due:</span> 
-                <span className="text-primary">${summary.totalDue.toFixed(2)}</span>
-              </p>
-            </div>
-          </div>
-        ))}
-        {summaries.length === 0 && state.people.length > 0 && state.items.length > 0 && (
-            <p className="text-muted-foreground text-center py-4">Assign items to people or shared pool to see individual summaries.</p>
+              <TableRow className="bg-muted/20">
+                <TableCell className="font-medium border-r">Subtotal (All Items & Shares)</TableCell>
+                {summaries.map(person => (
+                   <TableCell key={person.id} className="text-right font-medium border-r last:border-r-0">
+                    ${(
+                      person.itemsSubtotal +
+                      person.sharedItemsPortionValue +
+                      (person.customSharedPoolContributions?.reduce((sum, c) => sum + c.amount, 0) || 0)
+                    ).toFixed(2)}
+                  </TableCell>
+                ))}
+              </TableRow>
+              <TableRow>
+                <TableCell className="font-medium border-r">VAT/Tax Share</TableCell>
+                {summaries.map(person => (
+                  <TableCell key={person.id} className="text-right border-r last:border-r-0">${person.vatShare.toFixed(2)}</TableCell>
+                ))}
+              </TableRow>
+              <TableRow>
+                <TableCell className="font-medium border-r">Service Charge Share</TableCell>
+                {summaries.map(person => (
+                  <TableCell key={person.id} className="text-right border-r last:border-r-0">${person.serviceChargeShare.toFixed(2)}</TableCell>
+                ))}
+              </TableRow>
+              <TableRow className="border-t-2 border-primary">
+                <TableCell className="font-bold text-lg border-r">TOTAL DUE</TableCell>
+                {summaries.map(person => (
+                  <TableCell key={person.id} className="text-right font-bold text-lg text-primary border-r last:border-r-0">
+                    ${person.totalDue.toFixed(2)}
+                  </TableCell>
+                ))}
+              </TableRow>
+            </TableBody>
+          </Table>
+        ) : (
+          <>
+            {state.people.length === 0 && state.items.length > 0 && (
+              <p className="text-muted-foreground text-center py-4">Add people to see individual summaries.</p>
+            )}
+            {state.items.length === 0 && state.isOcrCompleted && (
+              <p className="text-muted-foreground text-center py-4">No items found on the bill or all items have a price of 0.</p>
+            )}
+            {summaries.length === 0 && state.people.length > 0 && state.items.length > 0 && (
+                <p className="text-muted-foreground text-center py-4">Assign items to people or shared pools to see individual summaries.</p>
+            )}
+          </>
         )}
-         {state.people.length === 0 && state.items.length > 0 && (
-           <p className="text-muted-foreground text-center py-4">Add people to see individual summaries.</p>
-         )}
-         {state.items.length === 0 && state.isOcrCompleted && (
-           <p className="text-muted-foreground text-center py-4">No items found on the bill or all items have a price of 0.</p>
-         )}
       </CardContent>
-      <CardFooter className="border-t pt-4">
+      <CardFooter className="border-t pt-4 summary-footer-print-container">
         <div className="w-full text-right">
           <p className="text-xl font-bold flex items-center justify-end gap-2">
              <FileText className="h-6 w-6 text-foreground"/>
-            Grand Total Bill: ${grandTotal.toFixed(2)}
+            Grand Total (from Bill): ${grandTotal.toFixed(2)}
           </p>
           <p className="text-xs text-muted-foreground mt-1">
-            (OCR Subtotal: ${state.billDetails.subtotal.toFixed(2)} + VAT/Tax: ${state.billDetails.vat.toFixed(2)} + Service Charge: ${state.billDetails.serviceCharge.toFixed(2)})
+            (Bill Subtotal: ${state.billDetails.subtotal.toFixed(2)} + VAT/Tax: ${state.billDetails.vat.toFixed(2)} + Service Charge: ${state.billDetails.serviceCharge.toFixed(2)})
           </p>
            <p className="text-xs text-muted-foreground mt-0.5">
-            (Sum of all item prices: ${state.items.reduce((acc, item) => acc + item.price, 0).toFixed(2)})
+            (Sum of all item prices currently entered: ${state.items.reduce((acc, item) => acc + item.price, 0).toFixed(2)})
           </p>
         </div>
       </CardFooter>
       <style jsx global>{`
         @media print {
           body * {
-            visibility: hidden;
+            visibility: hidden !important;
           }
-          .print-container, .print-container * {
-            visibility: visible;
+          .summary-card-print-container,
+          .summary-card-print-container *,
+          .summary-table-print-container, 
+          .summary-table-print-container *,
+          .summary-footer-print-container,
+          .summary-footer-print-container * {
+            visibility: visible !important;
           }
-          .print-container {
-            position: absolute;
-            left: 0;
-            top: 0;
-            width: 100%;
-            margin:0;
-            padding:0;
-            border: none;
-            box-shadow: none;
+          .summary-card-print-container {
+            position: absolute !important;
+            left: 0 !important;
+            top: 0 !important;
+            width: 100% !important;
+            margin: 0 !important;
+            padding: 20px !important; /* Add some padding for print */
+            border: none !important;
+            box-shadow: none !important;
+            background-color: #fff !important; 
+            -webkit-print-color-adjust: exact !important; 
+            color-adjust: exact !important;
           }
-          .print-hide {
+          .summary-card-print-container .print-hide {
             display: none !important;
           }
-          .print-container .p-4.border.rounded-lg {
-             border: 1px solid #ccc !important;
-             box-shadow: none !important;
-             background-color: #fff !important; 
-             -webkit-print-color-adjust: exact; 
-             color-adjust: exact;
+           .summary-card-print-container .text-primary {
+            color: #000 !important; /* Ensure primary text is black for printing */
           }
-          .print-container .text-primary {
-            color: #000 !important; 
+          .summary-card-print-container table, 
+          .summary-card-print-container th, 
+          .summary-card-print-container td {
+            border-color: #ccc !important; /* Lighter borders for print */
+            color: #000 !important; /* Ensure table text is black */
           }
-           .print-container .bg-card\/50 {
-            background-color: #f9f9f9 !important; 
-            -webkit-print-color-adjust: exact; 
-             color-adjust: exact;
+           .summary-card-print-container .bg-muted\\/20 { /* Escaped slash */
+            background-color: #f0f0f0 !important; /* Light gray for muted rows */
+            -webkit-print-color-adjust: exact !important; 
+            color-adjust: exact !important;
           }
-          .print-container .bg-muted\/30 {
-            background-color: #efefef !important;
-            -webkit-print-color-adjust: exact; 
-             color-adjust: exact;
+          .summary-card-print-container .border-primary {
+             border-color: #000 !important; /* Make sure important borders are black */
           }
+          /* Ensure card header and footer are styled simply for print */
+          .summary-card-print-container .card-header,
+          .summary-card-print-container .card-footer {
+             background-color: #fff !important;
+             border-top: 1px solid #ccc !important;
+             padding: 10px !important;
+          }
+           .summary-card-print-container .card-title,
+           .summary-card-print-container .card-description,
+           .summary-card-print-container .text-foreground,
+           .summary-card-print-container .text-muted-foreground {
+             color: #000 !important;
+           }
         }
       `}</style>
     </Card>
   );
 }
-
