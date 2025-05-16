@@ -1,10 +1,12 @@
+
 "use client";
 import { useBillContext } from '@/contexts/BillContext';
 import type { BillItem, Person } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { GripVertical, User, Users, Zap, Trash2, Loader2, Archive } from 'lucide-react';
+import { Separator } from '@/components/ui/separator';
+import { GripVertical, User, Users, Zap, Trash2, Loader2, Archive, Box } from 'lucide-react';
 import { suggestItemAssignment } from '@/ai/flows/suggest-item-assignment';
 import { useToast } from '@/hooks/use-toast';
 import React, { useState, type DragEvent } from 'react';
@@ -45,9 +47,10 @@ interface DropZoneProps {
   title: string;
   items: BillItem[];
   children?: React.ReactNode;
+  icon?: React.ReactNode;
 }
 
-function DropZone({ personId, title, items, children }: DropZoneProps) {
+function DropZone({ personId, title, items, children, icon }: DropZoneProps) {
   const { dispatch } = useBillContext();
   const [isOver, setIsOver] = useState(false);
 
@@ -69,15 +72,13 @@ function DropZone({ personId, title, items, children }: DropZoneProps) {
     }
   };
 
-  const getIcon = () => {
-    if (personId === 'SHARED') return <Archive className="h-5 w-5 text-primary"/>;
-    if (personId === null) return <Users className="h-5 w-5 text-primary"/>;
-    return <User className="h-5 w-5 text-primary"/>;
-  }
+  const defaultIcon = personId === 'SHARED' ? <Archive className="h-5 w-5 text-primary"/> : 
+                      personId === null ? <Box className="h-5 w-5 text-primary"/> : 
+                      <User className="h-5 w-5 text-primary"/>;
 
   return (
     <Card 
-      className={`flex-1 min-w-[250px] transition-all ${isOver ? 'bg-accent/30 ring-2 ring-primary' : 'bg-muted/20'}`}
+      className={`flex-1 min-w-[280px] md:min-w-[300px] transition-all ${isOver ? 'bg-accent/30 ring-2 ring-primary' : 'bg-muted/20'}`}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
@@ -85,12 +86,12 @@ function DropZone({ personId, title, items, children }: DropZoneProps) {
     >
       <CardHeader className="pb-2 pt-4">
         <CardTitle className="text-lg flex items-center gap-2">
-          {getIcon()}
+          {icon || defaultIcon}
           {title}
         </CardTitle>
       </CardHeader>
       <CardContent>
-        <ScrollArea className="h-80 pr-2">
+        <ScrollArea className="h-60 md:h-72 pr-2"> {/* Adjusted height for potentially more items */}
           {items.length === 0 && <p className="text-sm text-muted-foreground p-4 text-center">Drag items here</p>}
           {items.map(item => <DraggableItem key={item.id} item={item} />)}
         </ScrollArea>
@@ -104,14 +105,17 @@ export function ItemAssignmentArea() {
   const { state, dispatch } = useBillContext();
   const { toast } = useToast();
 
-  const unassignedItems = state.items.filter(item => item.assignedTo === null);
-  const sharedItems = state.items.filter(item => item.assignedTo === 'SHARED');
+  const itemsWithPrice = state.items.filter(item => item.price > 0);
+
+  const unassignedItems = itemsWithPrice.filter(item => item.assignedTo === null);
+  const sharedItems = itemsWithPrice.filter(item => item.assignedTo === 'SHARED');
+  
   const hasUnassignedItemsForSuggestion = unassignedItems.length > 0;
   const canSuggest = state.people.length > 0 && hasUnassignedItemsForSuggestion;
 
   const handleSuggestAssignments = async () => {
     if (!canSuggest) {
-      toast({ title: "Cannot suggest", description: "Ensure there are people and unassigned items.", variant: "default" });
+      toast({ title: "Cannot suggest", description: "Ensure there are people and unassigned items with a price greater than 0.", variant: "default" });
       return;
     }
     dispatch({ type: 'START_SUGGESTION' });
@@ -130,21 +134,12 @@ export function ItemAssignmentArea() {
         people: peopleNames,
       });
       
-      const assignmentsToDispatch: Record<string, string> = {}; // itemName -> personName
-      // Iterate over the AI's suggestions
+      const assignmentsToDispatch: Record<string, string> = {};
       for (const [itemNameFromAI, personNameFromAI] of Object.entries(result)) {
-        // Find the first unassigned item that matches the name suggested by AI
         const itemToAssign = unassignedItems.find(i => i.name === itemNameFromAI);
         const personTarget = state.people.find(p => p.name === personNameFromAI);
 
         if(itemToAssign && personTarget) {
-           // We will dispatch individual ASSIGN_ITEM actions.
-           // The reducer logic needs to be careful if item names are not unique,
-           // but for now, we assume suggestion is for one instance.
-           // This is simplified: if there are multiple "Coffee" items, AI might assign one.
-           // The current implementation of SUGGESTION_SUCCESS assigns all items with matching name.
-           // We should refine this to dispatch for specific item IDs if possible or update reducer.
-           // For now, the Suggestion success in reducer uses item name.
            assignmentsToDispatch[itemToAssign.name] = personTarget.name; 
         }
       }
@@ -157,7 +152,6 @@ export function ItemAssignmentArea() {
         dispatch({ type: 'SUGGESTION_FAILURE', payload: "No new assignments suggested by AI." });
       }
 
-
     } catch (error) {
       console.error("Suggestion Error:", error);
       const errorMessage = error instanceof Error ? error.message : "Unknown error during suggestion";
@@ -166,7 +160,7 @@ export function ItemAssignmentArea() {
     }
   };
 
-  if (state.items.length === 0) {
+  if (state.items.length === 0 && !state.isOcrCompleted) {
      return (
       <Card className="shadow-lg">
         <CardHeader>
@@ -190,22 +184,55 @@ export function ItemAssignmentArea() {
             <Zap className="h-7 w-7 text-primary" />
             Assign Items to People
           </CardTitle>
-          <CardDescription>Drag items from 'Unassigned' to a person or to 'Shared Items' to split them evenly.</CardDescription>
+          <CardDescription>Drag items from 'Unassigned' to a person or to 'Shared Items'. Items with a price of 0 are not shown.</CardDescription>
         </CardHeader>
-        <CardContent>
-          <div className="flex flex-col md:flex-row gap-4 overflow-x-auto pb-4">
-            <DropZone personId={null} title="Unassigned Items" items={unassignedItems} />
-            <DropZone personId="SHARED" title="Shared Items (Split Evenly)" items={sharedItems} />
-            {state.people.map(person => (
-              <DropZone
-                key={person.id}
-                personId={person.id}
-                title={person.name}
-                items={state.items.filter(item => item.assignedTo === person.id)}
-              />
-            ))}
+        <CardContent className="space-y-6">
+          {/* Top Section: Unassigned and Shared Items */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <DropZone 
+              personId={null} 
+              title="Unassigned Items" 
+              items={unassignedItems} 
+              icon={<Box className="h-5 w-5 text-indigo-500 dark:text-indigo-400"/>} 
+            />
+            <DropZone 
+              personId="SHARED" 
+              title="Shared Items (Split Evenly)" 
+              items={sharedItems} 
+              icon={<Archive className="h-5 w-5 text-teal-500 dark:text-teal-400"/>}
+            />
           </div>
-          {state.people.length === 0 && <p className="text-center text-muted-foreground mt-4">Add people to start assigning items.</p>}
+
+          {/* People Section */}
+          {state.people.length > 0 && (
+            <>
+              <Separator className="my-4" />
+              <div>
+                <h3 className="text-lg font-medium mb-3 flex items-center gap-2">
+                  <Users className="h-6 w-6 text-primary" />
+                  Assign to People
+                </h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 pb-4">
+                  {state.people.map(person => (
+                    <DropZone
+                      key={person.id}
+                      personId={person.id}
+                      title={person.name}
+                      items={itemsWithPrice.filter(item => item.assignedTo === person.id)}
+                      icon={<User className="h-5 w-5 text-blue-500 dark:text-blue-400"/>}
+                    />
+                  ))}
+                </div>
+              </div>
+            </>
+          )}
+          {state.people.length === 0 && itemsWithPrice.length > 0 && (
+             <p className="text-center text-muted-foreground mt-4">Add people to start assigning items to individuals.</p>
+          )}
+          {itemsWithPrice.length === 0 && state.isOcrCompleted && (
+            <p className="text-center text-muted-foreground mt-4">No items with a price greater than 0 to assign. Add items or check extracted bill.</p>
+          )}
+
         </CardContent>
       </Card>
       <div className="flex flex-col sm:flex-row gap-2 justify-end">

@@ -1,10 +1,11 @@
+
 "use client";
 import { useBillContext } from '@/contexts/BillContext';
 import type { CalculatedPersonSummary, BillItem } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
-import { Printer, ClipboardList, UserCircle, ShoppingBag, FileText, Users } from 'lucide-react';
+import { Download, ClipboardList, UserCircle, ShoppingBag, FileText, Users } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 export function SummaryDisplay() {
@@ -31,15 +32,9 @@ export function SummaryDisplay() {
 
     const numPeople = people.length;
     const sharedItemsPortionPerPerson = numPeople > 0 ? totalSharedItemsActualValue / numPeople : 0;
-
-    // This is the subtotal that VAT and Service Charge are based on (from the bill).
-    const ocrSubtotal = billDetails.subtotal; 
     
-    // This is the sum of all item prices (direct + shared), used for proportioning if OCR subtotal is missing.
+    const ocrSubtotal = billDetails.subtotal; 
     const sumOfAllItemPrices = items.reduce((sum, item) => sum + item.price, 0);
-
-    // Determine the base for calculating proportions of VAT/Service Charge.
-    // Prefer OCR subtotal. If not available or zero, use sum of all items.
     const subtotalBaseForProportions = ocrSubtotal > 0 ? ocrSubtotal : sumOfAllItemPrices;
 
 
@@ -47,19 +42,16 @@ export function SummaryDisplay() {
       const personDirectItems = items.filter(item => item.assignedTo === person.id);
       const personDirectItemsSubtotal = personDirectItems.reduce((sum, item) => sum + item.price, 0);
       
-      // Each person's "effective" contribution to the subtotal includes their direct items and their share of shared items.
       const personEffectiveSubtotalContribution = personDirectItemsSubtotal + sharedItemsPortionPerPerson;
       
       let personVatShare = 0;
       let personServiceChargeShare = 0;
 
       if (subtotalBaseForProportions > 0) {
-        // Proportion relative to the determined subtotal base.
         const personProportionOfSubtotalBase = personEffectiveSubtotalContribution / subtotalBaseForProportions;
         personVatShare = billDetails.vat * personProportionOfSubtotalBase;
         personServiceChargeShare = billDetails.serviceCharge * personProportionOfSubtotalBase;
       } else if (numPeople > 0) { 
-        // If no subtotal base (e.g. all items are $0, or no OCR subtotal), split VAT/SC equally.
         personVatShare = billDetails.vat / numPeople;
         personServiceChargeShare = billDetails.serviceCharge / numPeople;
       }
@@ -81,11 +73,13 @@ export function SummaryDisplay() {
 
   }, [state]);
 
-  const handlePrint = () => {
+  const handleSavePrint = () => {
+    // Note: True client-side screenshot-to-image download typically requires an external library (e.g., html2canvas).
+    // This uses the browser's print functionality, which usually allows "Save as PDF".
     window.print();
   };
   
-  if (state.people.length === 0 && state.items.length === 0) {
+  if (state.people.length === 0 && state.items.length === 0 && !state.isOcrCompleted) {
     return (
        <Card className="shadow-lg mt-6">
         <CardHeader>
@@ -113,9 +107,9 @@ export function SummaryDisplay() {
             </CardTitle>
             <CardDescription>Review each person's share of the bill.</CardDescription>
           </div>
-          <Button onClick={handlePrint} variant="outline" size="icon" className="print-hide">
-            <Printer className="h-5 w-5" />
-            <span className="sr-only">Print Summary</span>
+          <Button onClick={handleSavePrint} variant="outline" size="icon" className="print-hide">
+            <Download className="h-5 w-5" />
+            <span className="sr-only">Save or Print Summary</span>
           </Button>
         </div>
       </CardHeader>
@@ -167,11 +161,14 @@ export function SummaryDisplay() {
             </div>
           </div>
         ))}
-        {summaries.length === 0 && state.people.length > 0 && (
-            <p className="text-muted-foreground text-center py-4">No items assigned yet, or no items on the bill for individuals.</p>
+        {summaries.length === 0 && state.people.length > 0 && state.items.length > 0 && (
+            <p className="text-muted-foreground text-center py-4">Assign items to people or shared pool to see individual summaries.</p>
         )}
          {state.people.length === 0 && state.items.length > 0 && (
            <p className="text-muted-foreground text-center py-4">Add people to see individual summaries.</p>
+         )}
+         {state.items.length === 0 && state.isOcrCompleted && (
+           <p className="text-muted-foreground text-center py-4">No items found on the bill or all items have a price of 0.</p>
          )}
       </CardContent>
       <CardFooter className="border-t pt-4">
@@ -198,9 +195,28 @@ export function SummaryDisplay() {
             left: 0;
             top: 0;
             width: 100%;
+            margin:0;
+            padding:0;
+            border: none;
+            box-shadow: none;
           }
           .print-hide {
-            display: none;
+            display: none !important;
+          }
+          /* Ensure cards within summary are styled for print */
+          .print-container .p-4.border.rounded-lg {
+             border: 1px solid #ccc !important; /* Lighter border for print */
+             box-shadow: none !important;
+             background-color: #fff !important; /* Ensure white background */
+          }
+          .print-container .text-primary {
+            color: #000 !important; /* Black for primary text on print for readability */
+          }
+           .print-container .bg-card\/50 {
+            background-color: #f9f9f9 !important; /* Light gray for card backgrounds */
+          }
+          .print-container .bg-muted\/30 {
+            background-color: #efefef !important; /* Slightly different for muted backgrounds */
           }
         }
       `}</style>

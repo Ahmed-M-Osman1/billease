@@ -1,6 +1,7 @@
+
 "use client";
 import type { BillDetails, BillItem, Person } from '@/lib/types';
-import React, { createContext, useReducer, useContext, type ReactNode, type Dispatch } from 'react';
+import React, { createContext, useReducer, useContext, type ReactNode, type Dispatch, useEffect } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import type { ExtractBillItemsOutput } from '@/ai/flows/bill-item-extraction';
 
@@ -49,7 +50,8 @@ type BillAction =
   | { type: 'START_SUGGESTION' }
   | { type: 'SUGGESTION_SUCCESS'; payload: { assignments: Record<string, string> } } // { itemName: personName }
   | { type: 'SUGGESTION_FAILURE'; payload: string }
-  | { type: 'RESET_ALL_DATA' };
+  | { type: 'RESET_ALL_DATA' }
+  | { type: 'LOAD_PEOPLE'; payload: Person[] };
 
 
 function billReducer(state: BillState, action: BillAction): BillState {
@@ -148,7 +150,6 @@ function billReducer(state: BillState, action: BillAction): BillState {
     case 'SUGGESTION_SUCCESS': {
       const { assignments } = action.payload;
       const updatedItems = state.items.map(item => {
-        // Only attempt to assign items that are currently unassigned
         if (item.assignedTo === null) {
           const personName = assignments[item.name];
           if (personName) {
@@ -164,7 +165,10 @@ function billReducer(state: BillState, action: BillAction): BillState {
     }
     case 'SUGGESTION_FAILURE':
       return { ...state, isLoadingSuggestion: false, error: action.payload };
+    case 'LOAD_PEOPLE':
+      return { ...state, people: action.payload };
     case 'RESET_ALL_DATA':
+      localStorage.removeItem('billEasePeople'); // Clear saved people on full reset
       return initialState;
     default:
       return state;
@@ -175,6 +179,25 @@ const BillContext = createContext<{ state: BillState; dispatch: Dispatch<BillAct
 
 export const BillProvider = ({ children }: { children: ReactNode }) => {
   const [state, dispatch] = useReducer(billReducer, initialState);
+
+  useEffect(() => {
+    const storedPeopleRaw = localStorage.getItem('billEasePeople');
+    if (storedPeopleRaw) {
+      try {
+        const storedPeople = JSON.parse(storedPeopleRaw) as Person[];
+        if (Array.isArray(storedPeople) && storedPeople.every(p => typeof p.id === 'string' && typeof p.name === 'string')) {
+          dispatch({ type: 'LOAD_PEOPLE', payload: storedPeople });
+        } else {
+          console.warn("Invalid people data in local storage, clearing.");
+          localStorage.removeItem('billEasePeople');
+        }
+      } catch (error) {
+        console.error("Failed to parse people from local storage", error);
+        localStorage.removeItem('billEasePeople');
+      }
+    }
+  }, []);
+
   return (
     <BillContext.Provider value={{ state, dispatch }}>
       {children}
