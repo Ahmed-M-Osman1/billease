@@ -78,7 +78,7 @@ function DropZone({ personId, title, items, children, icon }: DropZoneProps) {
 
   return (
     <Card 
-      className={`flex-1 min-w-[280px] md:min-w-[300px] transition-all ${isOver ? 'bg-accent/30 ring-2 ring-primary' : 'bg-muted/20'}`}
+      className={`flex-1 transition-all ${isOver ? 'bg-accent/30 ring-2 ring-primary' : 'bg-muted/20'}`}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
