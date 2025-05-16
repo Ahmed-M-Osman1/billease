@@ -15,6 +15,7 @@ interface BillState {
   isOcrCompleted: boolean;
   isLoadingSuggestion: boolean;
   error: string | null;
+  ocrPriceMode: 'unit' | 'total'; // New state for the toggle
 }
 
 const initialState: BillState = {
@@ -31,6 +32,7 @@ const initialState: BillState = {
   isOcrCompleted: false,
   isLoadingSuggestion: false,
   error: null,
+  ocrPriceMode: 'unit', // Default to 'unit' price
 };
 
 type BillAction =
@@ -51,7 +53,8 @@ type BillAction =
   | { type: 'SUGGESTION_SUCCESS'; payload: { assignments: Record<string, string> } } // { itemName: personName }
   | { type: 'SUGGESTION_FAILURE'; payload: string }
   | { type: 'RESET_ALL_DATA' }
-  | { type: 'LOAD_PEOPLE'; payload: Person[] };
+  | { type: 'LOAD_PEOPLE'; payload: Person[] }
+  | { type: 'SET_OCR_PRICE_MODE'; payload: 'unit' | 'total' }; // New action
 
 
 function billReducer(state: BillState, action: BillAction): BillState {
@@ -65,12 +68,18 @@ function billReducer(state: BillState, action: BillAction): BillState {
     case 'OCR_SUCCESS': {
       const newItemsFromPayload: BillItem[] = [];
       action.payload.items.forEach(itemFromOcr => {
-        const count = itemFromOcr.quantity ?? 1;
-        for (let i = 0; i < count; i++) {
+        const quantity = itemFromOcr.quantity ?? 1;
+        let unitPrice = itemFromOcr.price;
+
+        if (state.ocrPriceMode === 'total' && quantity > 1 && itemFromOcr.price > 0) {
+          unitPrice = parseFloat((itemFromOcr.price / quantity).toFixed(2));
+        }
+
+        for (let i = 0; i < quantity; i++) {
           newItemsFromPayload.push({
             id: uuidv4(),
             name: itemFromOcr.name,
-            price: itemFromOcr.price,
+            price: unitPrice,
             assignedTo: null,
           });
         }
@@ -150,6 +159,7 @@ function billReducer(state: BillState, action: BillAction): BillState {
     case 'SUGGESTION_SUCCESS': {
       const { assignments } = action.payload;
       const updatedItems = state.items.map(item => {
+        // Only attempt to assign if currently unassigned
         if (item.assignedTo === null) {
           const personName = assignments[item.name];
           if (personName) {
@@ -170,6 +180,8 @@ function billReducer(state: BillState, action: BillAction): BillState {
     case 'RESET_ALL_DATA':
       localStorage.removeItem('billEasePeople'); // Clear saved people on full reset
       return initialState;
+    case 'SET_OCR_PRICE_MODE': // Handle new action
+      return { ...state, ocrPriceMode: action.payload };
     default:
       return state;
   }

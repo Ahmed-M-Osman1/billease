@@ -1,9 +1,11 @@
+
 "use client";
 import { useState, type ChangeEvent } from 'react';
 import { useBillContext } from '@/contexts/BillContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { extractBillItems } from '@/ai/flows/bill-item-extraction';
 import { useToast } from '@/hooks/use-toast';
@@ -79,6 +81,23 @@ export function BillUploadForm() {
             </Button>
           </div>
         )}
+
+        <div className="flex items-center space-x-3 my-3 p-2 border rounded-md bg-muted/30">
+          <Switch
+            id="ocr-price-mode"
+            checked={state.ocrPriceMode === 'unit'}
+            onCheckedChange={(checked) => {
+              dispatch({ type: 'SET_OCR_PRICE_MODE', payload: checked ? 'unit' : 'total' });
+            }}
+            aria-label="OCR Price Interpretation Mode Toggle"
+          />
+          <Label htmlFor="ocr-price-mode" className="text-sm text-foreground/90 leading-tight">
+            {state.ocrPriceMode === 'unit'
+              ? "Price is for one item (e.g., 2 Fries @ $5 ea.)"
+              : "Price is total for quantity (e.g., 2 Fries for $10 total)"}
+          </Label>
+        </div>
+        
         <Button onClick={handleExtractItems} disabled={!state.billImageDataUri || state.isLoadingOCR} className="w-full">
           {state.isLoadingOCR ? (
             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
