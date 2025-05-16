@@ -5,7 +5,7 @@ import type { CalculatedPersonSummary, BillItem, CustomSharedPool } from '@/lib/
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
-import { Download, ClipboardList, UserCircle, ShoppingBag, FileText, Users, Users2 } from 'lucide-react';
+import { Download, ClipboardList, UserCircle, ShoppingBag, FileText, Users, Users2, Archive } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 export function SummaryDisplay() {
@@ -13,7 +13,7 @@ export function SummaryDisplay() {
   const [summaries, setSummaries] = useState<CalculatedPersonSummary[]>([]);
   const [grandTotal, setGrandTotal] = useState(0);
   const [totalSharedAllPeopleValue, setTotalSharedAllPeopleValue] = useState(0);
-  const [customPoolSummaries, setCustomPoolSummaries] = useState<Array<{name: string; totalValue: number; numMembers: number, perPersonValue: number}>>([]);
+  const [customPoolSummaries, setCustomPoolSummaries] = useState<Array<{id: string; name: string; totalValue: number; numMembers: number, perPersonValue: number, personIds: string[]}>>([]);
 
 
   useEffect(() => {
@@ -64,7 +64,7 @@ export function SummaryDisplay() {
       const personDirectItemsSubtotal = personDirectItems.reduce((sum, item) => sum + item.price, 0);
       
       let personTotalContributionToSubtotal = personDirectItemsSubtotal + sharedAllPortionPerPerson;
-      const personCustomSharedPoolContributions: CalculatedPersonSummary['customSharedPoolContributions'] = [];
+      const personCustomSharedPoolContributions: CalculatedPersonSummary['customSharedPoolContributions'] = []; 
 
       currentCustomPoolSummaries.forEach(poolSummary => {
         if (poolSummary.personIds.includes(person.id)) {
@@ -97,8 +97,8 @@ export function SummaryDisplay() {
         itemsSubtotal: personDirectItemsSubtotal,
         vatShare: personVatShare,
         serviceChargeShare: personServiceChargeShare,
-        sharedItemsPortionValue: sharedAllPortionPerPerson, // Portion from SHARED_ALL_PEOPLE
-        customSharedPoolContributions,
+        sharedItemsPortionValue: sharedAllPortionPerPerson,
+        customSharedPoolContributions: personCustomSharedPoolContributions,
         totalDue,
       };
     });
@@ -195,11 +195,12 @@ export function SummaryDisplay() {
 
             <div className="text-sm space-y-1 mt-2 pt-2 border-t border-dashed">
               <p className="flex justify-between"><span>Share from "All People" Pool:</span> <span>${summary.sharedItemsPortionValue.toFixed(2)}</span></p>
-              {summary.customSharedPoolContributions.map(contrib => (
-                <p key={contrib.poolName} className="flex justify-between"><span>Share from "{contrib.poolName}":</span> <span>${contrib.amount.toFixed(2)}</span></p>
+              {summary.customSharedPoolContributions && summary.customSharedPoolContributions.length > 0 &&
+                summary.customSharedPoolContributions.map(contrib => (
+                  <p key={contrib.poolName} className="flex justify-between"><span>Share from "{contrib.poolName}":</span> <span>${contrib.amount.toFixed(2)}</span></p>
               ))}
               <Separator className="my-1" />
-              <p className="flex justify-between"><span>Subtotal (Items + All Shares):</span> <span>${(summary.itemsSubtotal + summary.sharedItemsPortionValue + summary.customSharedPoolContributions.reduce((sum, c) => sum + c.amount, 0)).toFixed(2)}</span></p>
+              <p className="flex justify-between"><span>Subtotal (Items + All Shares):</span> <span>${(summary.itemsSubtotal + summary.sharedItemsPortionValue + (summary.customSharedPoolContributions?.reduce((sum, c) => sum + c.amount, 0) || 0)).toFixed(2)}</span></p>
               <p className="flex justify-between"><span>VAT/Tax Share:</span> <span>${summary.vatShare.toFixed(2)}</span></p>
               <p className="flex justify-between"><span>Service Charge Share:</span> <span>${summary.serviceChargeShare.toFixed(2)}</span></p>
               <Separator className="my-1" />
@@ -280,3 +281,4 @@ export function SummaryDisplay() {
     </Card>
   );
 }
+
