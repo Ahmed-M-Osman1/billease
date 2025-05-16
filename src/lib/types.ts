@@ -1,13 +1,20 @@
+
 export interface BillItem {
   id: string;
   name: string;
   price: number;
-  assignedTo: string | null | 'SHARED'; // personId, null if unassigned, or 'SHARED'
+  assignedTo: string | null; // personId, customSharedPoolId, 'SHARED_ALL_PEOPLE', or null if unassigned
 }
 
 export interface Person {
   id: string;
   name: string;
+}
+
+export interface CustomSharedPool {
+  id: string;
+  name: string;
+  personIds: string[]; // IDs of people in this specific pool
 }
 
 export interface BillDetails {
@@ -21,6 +28,7 @@ export interface CalculatedPersonSummary extends Person {
   itemsSubtotal: number; // Subtotal of directly assigned items
   vatShare: number;
   serviceChargeShare: number;
-  sharedItemsPortionValue: number; // Value of shared items this person is responsible for
+  sharedItemsPortionValue: number; // Value from 'SHARED_ALL_PEOPLE' items
+  customSharedPoolContributions: Array<{ poolName: string; amount: number }>; // Contributions from custom shared pools
   totalDue: number;
 }

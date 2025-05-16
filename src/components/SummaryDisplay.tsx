@@ -1,62 +1,95 @@
 
 "use client";
 import { useBillContext } from '@/contexts/BillContext';
-import type { CalculatedPersonSummary, BillItem } from '@/lib/types';
+import type { CalculatedPersonSummary, BillItem, CustomSharedPool } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
-import { Download, ClipboardList, UserCircle, ShoppingBag, FileText, Users } from 'lucide-react';
+import { Download, ClipboardList, UserCircle, ShoppingBag, FileText, Users, Users2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 export function SummaryDisplay() {
   const { state } = useBillContext();
   const [summaries, setSummaries] = useState<CalculatedPersonSummary[]>([]);
   const [grandTotal, setGrandTotal] = useState(0);
-  const [totalSharedItemsValueForDisplay, setTotalSharedItemsValueForDisplay] = useState(0);
+  const [totalSharedAllPeopleValue, setTotalSharedAllPeopleValue] = useState(0);
+  const [customPoolSummaries, setCustomPoolSummaries] = useState<Array<{name: string; totalValue: number; numMembers: number, perPersonValue: number}>>([]);
+
 
   useEffect(() => {
-    const { items, people, billDetails } = state;
+    const { items, people, billDetails, customSharedPools } = state;
 
     const billGrandTotal = billDetails.subtotal + billDetails.vat + billDetails.serviceCharge;
     setGrandTotal(billGrandTotal);
 
     if (people.length === 0) {
       setSummaries([]);
-      setTotalSharedItemsValueForDisplay(items.filter(item => item.assignedTo === 'SHARED').reduce((sum, item) => sum + item.price, 0));
+      setTotalSharedAllPeopleValue(items.filter(item => item.assignedTo === 'SHARED_ALL_PEOPLE').reduce((sum, item) => sum + item.price, 0));
+      setCustomPoolSummaries([]);
       return;
     }
 
-    const sharedPoolItems = items.filter(item => item.assignedTo === 'SHARED');
-    const totalSharedItemsActualValue = sharedPoolItems.reduce((sum, item) => sum + item.price, 0);
-    setTotalSharedItemsValueForDisplay(totalSharedItemsActualValue);
+    // Calculate SHARED_ALL_PEOPLE items
+    const sharedAllPoolItems = items.filter(item => item.assignedTo === 'SHARED_ALL_PEOPLE');
+    const currentTotalSharedAllPeopleValue = sharedAllPoolItems.reduce((sum, item) => sum + item.price, 0);
+    setTotalSharedAllPeopleValue(currentTotalSharedAllPeopleValue);
+    const sharedAllPortionPerPerson = people.length > 0 ? currentTotalSharedAllPeopleValue / people.length : 0;
 
-    const numPeople = people.length;
-    const sharedItemsPortionPerPerson = numPeople > 0 ? totalSharedItemsActualValue / numPeople : 0;
+    // Calculate Custom Shared Pools
+    const currentCustomPoolSummaries = customSharedPools.map(pool => {
+      const poolItems = items.filter(item => item.assignedTo === pool.id);
+      const totalValue = poolItems.reduce((sum, item) => sum + item.price, 0);
+      const numMembers = pool.personIds.length;
+      const perPersonValue = numMembers > 0 ? totalValue / numMembers : 0;
+      return {
+        id: pool.id,
+        name: pool.name,
+        totalValue,
+        numMembers,
+        perPersonValue,
+        personIds: pool.personIds,
+      };
+    });
+    setCustomPoolSummaries(currentCustomPoolSummaries);
     
+    // Determine subtotal base for tax/service charge proportions
     const ocrSubtotal = billDetails.subtotal; 
     const sumOfAllItemPrices = items.reduce((sum, item) => sum + item.price, 0);
-    const subtotalBaseForProportions = ocrSubtotal > 0 ? ocrSubtotal : sumOfAllItemPrices;
+    // If OCR subtotal is 0 or less than sum of items, use sum of items as base. This handles cases where OCR might fail for subtotal but items are correct.
+    const subtotalBaseForProportions = ocrSubtotal > 0 && ocrSubtotal >= sumOfAllItemPrices ? ocrSubtotal : sumOfAllItemPrices;
 
 
     const calculatedSummaries: CalculatedPersonSummary[] = people.map(person => {
       const personDirectItems = items.filter(item => item.assignedTo === person.id);
       const personDirectItemsSubtotal = personDirectItems.reduce((sum, item) => sum + item.price, 0);
       
-      const personEffectiveSubtotalContribution = personDirectItemsSubtotal + sharedItemsPortionPerPerson;
+      let personTotalContributionToSubtotal = personDirectItemsSubtotal + sharedAllPortionPerPerson;
+      const personCustomSharedPoolContributions: CalculatedPersonSummary['customSharedPoolContributions'] = [];
+
+      currentCustomPoolSummaries.forEach(poolSummary => {
+        if (poolSummary.personIds.includes(person.id)) {
+          personTotalContributionToSubtotal += poolSummary.perPersonValue;
+          personCustomSharedPoolContributions.push({
+            poolName: poolSummary.name,
+            amount: poolSummary.perPersonValue,
+          });
+        }
+      });
       
       let personVatShare = 0;
       let personServiceChargeShare = 0;
 
       if (subtotalBaseForProportions > 0) {
-        const personProportionOfSubtotalBase = personEffectiveSubtotalContribution / subtotalBaseForProportions;
+        const personProportionOfSubtotalBase = personTotalContributionToSubtotal / subtotalBaseForProportions;
         personVatShare = billDetails.vat * personProportionOfSubtotalBase;
         personServiceChargeShare = billDetails.serviceCharge * personProportionOfSubtotalBase;
-      } else if (numPeople > 0) { 
-        personVatShare = billDetails.vat / numPeople;
-        personServiceChargeShare = billDetails.serviceCharge / numPeople;
+      } else if (people.length > 0) { 
+        // Fallback if subtotalBase is 0: distribute tax/service charge equally
+        personVatShare = billDetails.vat / people.length;
+        personServiceChargeShare = billDetails.serviceCharge / people.length;
       }
       
-      const totalDue = personDirectItemsSubtotal + sharedItemsPortionPerPerson + personVatShare + personServiceChargeShare;
+      const totalDue = personTotalContributionToSubtotal + personVatShare + personServiceChargeShare;
 
       return {
         ...person,
@@ -64,7 +97,8 @@ export function SummaryDisplay() {
         itemsSubtotal: personDirectItemsSubtotal,
         vatShare: personVatShare,
         serviceChargeShare: personServiceChargeShare,
-        sharedItemsPortionValue: sharedItemsPortionPerPerson,
+        sharedItemsPortionValue: sharedAllPortionPerPerson, // Portion from SHARED_ALL_PEOPLE
+        customSharedPoolContributions,
         totalDue,
       };
     });
@@ -74,8 +108,6 @@ export function SummaryDisplay() {
   }, [state]);
 
   const handleSavePrint = () => {
-    // Note: True client-side screenshot-to-image download typically requires an external library (e.g., html2canvas).
-    // This uses the browser's print functionality, which usually allows "Save as PDF".
     window.print();
   };
   
@@ -114,16 +146,28 @@ export function SummaryDisplay() {
         </div>
       </CardHeader>
       <CardContent className="space-y-6">
-        {totalSharedItemsValueForDisplay > 0 && state.people.length > 0 && (
+        {totalSharedAllPeopleValue > 0 && state.people.length > 0 && (
           <div className="p-4 border rounded-lg bg-muted/30">
             <h3 className="text-md font-semibold flex items-center gap-2 text-accent-foreground">
-              <Users className="h-5 w-5" /> Shared Items Total: ${totalSharedItemsValueForDisplay.toFixed(2)}
+              <Archive className="h-5 w-5" /> Shared (All People) Total: ${totalSharedAllPeopleValue.toFixed(2)}
             </h3>
             <p className="text-xs text-muted-foreground">
-              (Each of the {state.people.length} person(s) will have ${(totalSharedItemsValueForDisplay / state.people.length).toFixed(2)} added to their individual totals from these shared items, plus their share of associated tax/service charge)
+              (Each of the {state.people.length} person(s) will have ${(totalSharedAllPeopleValue / state.people.length).toFixed(2)} added from these items)
             </p>
           </div>
         )}
+
+        {customPoolSummaries.filter(cps => cps.totalValue > 0).map(poolSummary => (
+           <div key={poolSummary.id} className="p-4 border rounded-lg bg-muted/30">
+            <h3 className="text-md font-semibold flex items-center gap-2 text-accent-foreground">
+              <Users2 className="h-5 w-5" /> Shared Group: {poolSummary.name} - Total: ${poolSummary.totalValue.toFixed(2)}
+            </h3>
+            <p className="text-xs text-muted-foreground">
+              (Split among {poolSummary.numMembers} member(s): ${poolSummary.perPersonValue.toFixed(2)} each for this group's items)
+            </p>
+          </div>
+        ))}
+
 
         {summaries.map(summary => (
           <div key={summary.id} className="p-4 border rounded-lg bg-card/50">
@@ -150,7 +194,12 @@ export function SummaryDisplay() {
              )}
 
             <div className="text-sm space-y-1 mt-2 pt-2 border-t border-dashed">
-              <p className="flex justify-between"><span>Portion of Shared Items:</span> <span>${summary.sharedItemsPortionValue.toFixed(2)}</span></p>
+              <p className="flex justify-between"><span>Share from "All People" Pool:</span> <span>${summary.sharedItemsPortionValue.toFixed(2)}</span></p>
+              {summary.customSharedPoolContributions.map(contrib => (
+                <p key={contrib.poolName} className="flex justify-between"><span>Share from "{contrib.poolName}":</span> <span>${contrib.amount.toFixed(2)}</span></p>
+              ))}
+              <Separator className="my-1" />
+              <p className="flex justify-between"><span>Subtotal (Items + All Shares):</span> <span>${(summary.itemsSubtotal + summary.sharedItemsPortionValue + summary.customSharedPoolContributions.reduce((sum, c) => sum + c.amount, 0)).toFixed(2)}</span></p>
               <p className="flex justify-between"><span>VAT/Tax Share:</span> <span>${summary.vatShare.toFixed(2)}</span></p>
               <p className="flex justify-between"><span>Service Charge Share:</span> <span>${summary.serviceChargeShare.toFixed(2)}</span></p>
               <Separator className="my-1" />
@@ -178,7 +227,10 @@ export function SummaryDisplay() {
             Grand Total Bill: ${grandTotal.toFixed(2)}
           </p>
           <p className="text-xs text-muted-foreground mt-1">
-            (Subtotal: ${state.billDetails.subtotal.toFixed(2)} + VAT/Tax: ${state.billDetails.vat.toFixed(2)} + Service Charge: ${state.billDetails.serviceCharge.toFixed(2)})
+            (OCR Subtotal: ${state.billDetails.subtotal.toFixed(2)} + VAT/Tax: ${state.billDetails.vat.toFixed(2)} + Service Charge: ${state.billDetails.serviceCharge.toFixed(2)})
+          </p>
+           <p className="text-xs text-muted-foreground mt-0.5">
+            (Sum of all item prices: ${state.items.reduce((acc, item) => acc + item.price, 0).toFixed(2)})
           </p>
         </div>
       </CardFooter>
@@ -203,20 +255,25 @@ export function SummaryDisplay() {
           .print-hide {
             display: none !important;
           }
-          /* Ensure cards within summary are styled for print */
           .print-container .p-4.border.rounded-lg {
-             border: 1px solid #ccc !important; /* Lighter border for print */
+             border: 1px solid #ccc !important;
              box-shadow: none !important;
-             background-color: #fff !important; /* Ensure white background */
+             background-color: #fff !important; 
+             -webkit-print-color-adjust: exact; 
+             color-adjust: exact;
           }
           .print-container .text-primary {
-            color: #000 !important; /* Black for primary text on print for readability */
+            color: #000 !important; 
           }
            .print-container .bg-card\/50 {
-            background-color: #f9f9f9 !important; /* Light gray for card backgrounds */
+            background-color: #f9f9f9 !important; 
+            -webkit-print-color-adjust: exact; 
+             color-adjust: exact;
           }
           .print-container .bg-muted\/30 {
-            background-color: #efefef !important; /* Slightly different for muted backgrounds */
+            background-color: #efefef !important;
+            -webkit-print-color-adjust: exact; 
+             color-adjust: exact;
           }
         }
       `}</style>

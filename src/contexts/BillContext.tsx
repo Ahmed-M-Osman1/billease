@@ -1,6 +1,6 @@
 
 "use client";
-import type { BillDetails, BillItem, Person } from '@/lib/types';
+import type { BillDetails, BillItem, Person, CustomSharedPool } from '@/lib/types';
 import React, { createContext, useReducer, useContext, type ReactNode, type Dispatch, useEffect } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import type { ExtractBillItemsOutput } from '@/ai/flows/bill-item-extraction';
@@ -10,12 +10,13 @@ interface BillState {
   billImageDataUri: string | null;
   items: BillItem[];
   people: Person[];
+  customSharedPools: CustomSharedPool[];
   billDetails: BillDetails;
   isLoadingOCR: boolean;
   isOcrCompleted: boolean;
   isLoadingSuggestion: boolean;
   error: string | null;
-  ocrPriceMode: 'unit' | 'total'; // New state for the toggle
+  ocrPriceMode: 'unit' | 'total';
 }
 
 const initialState: BillState = {
@@ -23,6 +24,7 @@ const initialState: BillState = {
   billImageDataUri: null,
   items: [],
   people: [],
+  customSharedPools: [],
   billDetails: {
     subtotal: 0,
     vat: 0,
@@ -32,7 +34,7 @@ const initialState: BillState = {
   isOcrCompleted: false,
   isLoadingSuggestion: false,
   error: null,
-  ocrPriceMode: 'unit', // Default to 'unit' price
+  ocrPriceMode: 'unit',
 };
 
 type BillAction =
@@ -47,14 +49,18 @@ type BillAction =
   | { type: 'UPDATE_BILL_DETAILS'; payload: Partial<BillDetails> }
   | { type: 'SET_PEOPLE_COUNT'; payload: number }
   | { type: 'UPDATE_PERSON_NAME'; payload: { id: string; name: string } }
-  | { type: 'ASSIGN_ITEM'; payload: { itemId: string; personId: string | null | 'SHARED' } }
+  | { type: 'ASSIGN_ITEM'; payload: { itemId: string; targetId: string | null } } // targetId can be personId, customPoolId, 'SHARED_ALL_PEOPLE' or null
   | { type: 'RESET_ASSIGNMENTS' }
   | { type: 'START_SUGGESTION' }
   | { type: 'SUGGESTION_SUCCESS'; payload: { assignments: Record<string, string> } } // { itemName: personName }
   | { type: 'SUGGESTION_FAILURE'; payload: string }
   | { type: 'RESET_ALL_DATA' }
   | { type: 'LOAD_PEOPLE'; payload: Person[] }
-  | { type: 'SET_OCR_PRICE_MODE'; payload: 'unit' | 'total' }; // New action
+  | { type: 'SET_OCR_PRICE_MODE'; payload: 'unit' | 'total' }
+  | { type: 'ADD_CUSTOM_SHARED_POOL'; payload: { name: string; personIds: string[] } }
+  | { type: 'UPDATE_CUSTOM_SHARED_POOL'; payload: CustomSharedPool }
+  | { type: 'DELETE_CUSTOM_SHARED_POOL'; payload: string } // poolId
+  | { type: 'LOAD_CUSTOM_SHARED_POOLS'; payload: CustomSharedPool[] };
 
 
 function billReducer(state: BillState, action: BillAction): BillState {
@@ -130,14 +136,32 @@ function billReducer(state: BillState, action: BillAction): BillState {
           newPeople.push({ id: uuidv4(), name: `Person ${i + 1}` });
         }
       }
-      // Unassign items from people who are removed (does not affect 'SHARED' items)
       const newPeopleIds = new Set(newPeople.map(p => p.id));
-      const updatedItems = state.items.map(item => 
-        item.assignedTo && item.assignedTo !== 'SHARED' && !newPeopleIds.has(item.assignedTo) 
-        ? { ...item, assignedTo: null } 
-        : item
-      );
-      return { ...state, people: newPeople, items: updatedItems };
+      
+      // Update items assigned to removed people
+      let updatedItems = state.items.map(item => {
+        if (item.assignedTo && item.assignedTo !== 'SHARED_ALL_PEOPLE' && !state.customSharedPools.find(p => p.id === item.assignedTo) && !newPeopleIds.has(item.assignedTo)) {
+          return { ...item, assignedTo: null };
+        }
+        return item;
+      });
+
+      // Update custom shared pools
+      let updatedCustomSharedPools = state.customSharedPools.map(pool => ({
+        ...pool,
+        personIds: pool.personIds.filter(pid => newPeopleIds.has(pid)),
+      })).filter(pool => pool.personIds.length > 0); // Remove pools with no people
+
+      // Unassign items from deleted custom shared pools
+      const remainingCustomPoolIds = new Set(updatedCustomSharedPools.map(p => p.id));
+      updatedItems = updatedItems.map(item => {
+        if (item.assignedTo && item.assignedTo !== 'SHARED_ALL_PEOPLE' && !newPeopleIds.has(item.assignedTo) && !remainingCustomPoolIds.has(item.assignedTo)) {
+           return { ...item, assignedTo: null };
+        }
+        return item;
+      });
+
+      return { ...state, people: newPeople, items: updatedItems, customSharedPools: updatedCustomSharedPools };
     }
     case 'UPDATE_PERSON_NAME':
       return {
@@ -147,7 +171,7 @@ function billReducer(state: BillState, action: BillAction): BillState {
     case 'ASSIGN_ITEM':
       return {
         ...state,
-        items: state.items.map(item => item.id === action.payload.itemId ? { ...item, assignedTo: action.payload.personId } : item),
+        items: state.items.map(item => item.id === action.payload.itemId ? { ...item, assignedTo: action.payload.targetId } : item),
       };
     case 'RESET_ASSIGNMENTS':
       return {
@@ -159,7 +183,6 @@ function billReducer(state: BillState, action: BillAction): BillState {
     case 'SUGGESTION_SUCCESS': {
       const { assignments } = action.payload;
       const updatedItems = state.items.map(item => {
-        // Only attempt to assign if currently unassigned
         if (item.assignedTo === null) {
           const personName = assignments[item.name];
           if (personName) {
@@ -178,10 +201,39 @@ function billReducer(state: BillState, action: BillAction): BillState {
     case 'LOAD_PEOPLE':
       return { ...state, people: action.payload };
     case 'RESET_ALL_DATA':
-      localStorage.removeItem('billEasePeople'); // Clear saved people on full reset
+      localStorage.removeItem('billEasePeople');
+      localStorage.removeItem('billEaseCustomSharedPools');
       return initialState;
-    case 'SET_OCR_PRICE_MODE': // Handle new action
+    case 'SET_OCR_PRICE_MODE':
       return { ...state, ocrPriceMode: action.payload };
+    
+    case 'ADD_CUSTOM_SHARED_POOL': {
+      const newPool: CustomSharedPool = {
+        id: uuidv4(),
+        name: action.payload.name,
+        personIds: action.payload.personIds,
+      };
+      const updatedPools = [...state.customSharedPools, newPool];
+      localStorage.setItem('billEaseCustomSharedPools', JSON.stringify(updatedPools));
+      return { ...state, customSharedPools: updatedPools };
+    }
+    case 'UPDATE_CUSTOM_SHARED_POOL': {
+      const updatedPools = state.customSharedPools.map(pool => pool.id === action.payload.id ? action.payload : pool);
+      localStorage.setItem('billEaseCustomSharedPools', JSON.stringify(updatedPools));
+      return { ...state, customSharedPools: updatedPools };
+    }
+    case 'DELETE_CUSTOM_SHARED_POOL': {
+      const poolIdToDelete = action.payload;
+      const updatedPools = state.customSharedPools.filter(pool => pool.id !== poolIdToDelete);
+      localStorage.setItem('billEaseCustomSharedPools', JSON.stringify(updatedPools));
+      // Unassign items from the deleted pool
+      const updatedItems = state.items.map(item => 
+        item.assignedTo === poolIdToDelete ? { ...item, assignedTo: null } : item
+      );
+      return { ...state, customSharedPools: updatedPools, items: updatedItems };
+    }
+    case 'LOAD_CUSTOM_SHARED_POOLS':
+      return { ...state, customSharedPools: action.payload };
     default:
       return state;
   }
@@ -200,12 +252,24 @@ export const BillProvider = ({ children }: { children: ReactNode }) => {
         if (Array.isArray(storedPeople) && storedPeople.every(p => typeof p.id === 'string' && typeof p.name === 'string')) {
           dispatch({ type: 'LOAD_PEOPLE', payload: storedPeople });
         } else {
-          console.warn("Invalid people data in local storage, clearing.");
           localStorage.removeItem('billEasePeople');
         }
       } catch (error) {
-        console.error("Failed to parse people from local storage", error);
         localStorage.removeItem('billEasePeople');
+      }
+    }
+
+    const storedCustomPoolsRaw = localStorage.getItem('billEaseCustomSharedPools');
+    if (storedCustomPoolsRaw) {
+      try {
+        const storedCustomPools = JSON.parse(storedCustomPoolsRaw) as CustomSharedPool[];
+        if (Array.isArray(storedCustomPools) && storedCustomPools.every(p => typeof p.id === 'string' && typeof p.name === 'string' && Array.isArray(p.personIds))) {
+          dispatch({ type: 'LOAD_CUSTOM_SHARED_POOLS', payload: storedCustomPools });
+        } else {
+          localStorage.removeItem('billEaseCustomSharedPools');
+        }
+      } catch (error) {
+        localStorage.removeItem('billEaseCustomSharedPools');
       }
     }
   }, []);
