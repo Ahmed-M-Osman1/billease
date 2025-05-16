@@ -2,7 +2,7 @@ export interface BillItem {
   id: string;
   name: string;
   price: number;
-  assignedTo: string | null; // personId or null if unassigned
+  assignedTo: string | null | 'SHARED'; // personId, null if unassigned, or 'SHARED'
 }
 
 export interface Person {
@@ -17,9 +17,10 @@ export interface BillDetails {
 }
 
 export interface CalculatedPersonSummary extends Person {
-  items: BillItem[];
-  itemsSubtotal: number;
+  items: BillItem[]; // Directly assigned items
+  itemsSubtotal: number; // Subtotal of directly assigned items
   vatShare: number;
   serviceChargeShare: number;
+  sharedItemsPortionValue: number; // Value of shared items this person is responsible for
   totalDue: number;
 }

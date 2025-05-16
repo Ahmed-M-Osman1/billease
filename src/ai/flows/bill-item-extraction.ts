@@ -25,10 +25,11 @@ const ExtractBillItemsOutputSchema = z.object({
     .array(
       z.object({
         name: z.string().describe('The name of the item.'),
-        price: z.number().describe('The price of the item.'),
+        price: z.number().describe('The unit price of the item. If a quantity is specified, this should be the price for a single item.'),
+        quantity: z.number().optional().describe('The quantity of this item. Defaults to 1 if not specified.'),
       })
     )
-    .describe('The extracted line items and prices from the bill.'),
+    .describe('The extracted line items, their unit prices, and quantities from the bill.'),
   subtotal: z.number().optional().describe('The subtotal amount from the bill, if available.'),
   vat: z.number().optional().describe('The VAT amount from the bill, if available.'),
   serviceCharge: z
@@ -48,9 +49,13 @@ const prompt = ai.definePrompt({
   output: {schema: ExtractBillItemsOutputSchema},
   prompt: `You are an expert OCR reader and data extractor for restaurant bills.
 
-You will receive a photo of a bill and you will extract all line items, prices, subtotal, VAT, and service charge from the image, if present.
+You will receive a photo of a bill and you will extract all line items, their names, their *unit prices*, and quantities.
+If an item has a quantity (e.g., "2x Fries" or "Fries ..... 2 ..... $price_each"), please return the item name as "Fries", its quantity as 2, and the price for a *single unit* of Fries.
+If quantity is not specified or is 1, return quantity as 1. Ensure the price is for a single item, not the total for multiple quantities of the same line item.
 
-Return the data in JSON format.  If a value is not present in the image, omit it from the JSON.
+Also extract subtotal, VAT, and service charge from the image, if present.
+
+Return the data in JSON format. If a value is not present in the image, omit it from the JSON.
 
 Bill Image: {{media url=photoDataUri}}
 `,

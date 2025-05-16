@@ -4,7 +4,7 @@ import type { BillItem, Person } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { GripVertical, User, Users, Zap, Trash2, Loader2 } from 'lucide-react';
+import { GripVertical, User, Users, Zap, Trash2, Loader2, Archive } from 'lucide-react';
 import { suggestItemAssignment } from '@/ai/flows/suggest-item-assignment';
 import { useToast } from '@/hooks/use-toast';
 import React, { useState, type DragEvent } from 'react';
@@ -41,7 +41,7 @@ function DraggableItem({ item }: DraggableItemProps) {
 }
 
 interface DropZoneProps {
-  personId: string | null; // null for unassigned
+  personId: string | null | 'SHARED'; 
   title: string;
   items: BillItem[];
   children?: React.ReactNode;
@@ -69,6 +69,12 @@ function DropZone({ personId, title, items, children }: DropZoneProps) {
     }
   };
 
+  const getIcon = () => {
+    if (personId === 'SHARED') return <Archive className="h-5 w-5 text-primary"/>;
+    if (personId === null) return <Users className="h-5 w-5 text-primary"/>;
+    return <User className="h-5 w-5 text-primary"/>;
+  }
+
   return (
     <Card 
       className={`flex-1 min-w-[250px] transition-all ${isOver ? 'bg-accent/30 ring-2 ring-primary' : 'bg-muted/20'}`}
@@ -79,7 +85,7 @@ function DropZone({ personId, title, items, children }: DropZoneProps) {
     >
       <CardHeader className="pb-2 pt-4">
         <CardTitle className="text-lg flex items-center gap-2">
-          {personId ? <User className="h-5 w-5 text-primary"/> : <Users className="h-5 w-5 text-primary"/> }
+          {getIcon()}
           {title}
         </CardTitle>
       </CardHeader>
@@ -99,8 +105,9 @@ export function ItemAssignmentArea() {
   const { toast } = useToast();
 
   const unassignedItems = state.items.filter(item => item.assignedTo === null);
-  const hasUnassignedItems = unassignedItems.length > 0;
-  const canSuggest = state.people.length > 0 && hasUnassignedItems;
+  const sharedItems = state.items.filter(item => item.assignedTo === 'SHARED');
+  const hasUnassignedItemsForSuggestion = unassignedItems.length > 0;
+  const canSuggest = state.people.length > 0 && hasUnassignedItemsForSuggestion;
 
   const handleSuggestAssignments = async () => {
     if (!canSuggest) {
@@ -109,41 +116,47 @@ export function ItemAssignmentArea() {
     }
     dispatch({ type: 'START_SUGGESTION' });
     try {
-      // For simplicity, order history is not implemented in this version.
-      // The AI flow mentions optional orderHistory: Record<string, string>.
-      // We pass an empty object or undefined.
-      const itemNames = state.items.filter(i => i.assignedTo === null).map(i => i.name); // Only suggest for unassigned items.
+      const itemNamesToSuggest = unassignedItems.map(i => i.name); 
       const peopleNames = state.people.map(p => p.name);
 
-      if (itemNames.length === 0) {
+      if (itemNamesToSuggest.length === 0) {
         toast({ title: "No items to suggest", description: "All items are already assigned or there are no items." });
         dispatch({ type: 'SUGGESTION_FAILURE', payload: "No unassigned items for suggestion." });
         return;
       }
 
       const result = await suggestItemAssignment({
-        items: itemNames,
+        items: itemNamesToSuggest,
         people: peopleNames,
-        // orderHistory: {} // Example: Pass empty if not used
       });
       
-      // The AI returns { itemName: personName }. We need to map this back.
-      // This simplified mapping assumes item names are unique among unassigned items
-      // and person names are unique.
-      const assignmentsToDispatch: Record<string, string> = {};
-      for (const [itemName, personName] of Object.entries(result)) {
-         const itemToAssign = state.items.find(i => i.name === itemName && i.assignedTo === null);
-         const personTarget = state.people.find(p => p.name === personName);
-         if(itemToAssign && personTarget) {
-            // We'll dispatch individual ASSIGN_ITEM actions for clarity,
-            // or the reducer can be enhanced to take a map.
-            // For now, let's build a map for the reducer to handle.
-            assignmentsToDispatch[itemToAssign.name] = personTarget.name; 
-         }
+      const assignmentsToDispatch: Record<string, string> = {}; // itemName -> personName
+      // Iterate over the AI's suggestions
+      for (const [itemNameFromAI, personNameFromAI] of Object.entries(result)) {
+        // Find the first unassigned item that matches the name suggested by AI
+        const itemToAssign = unassignedItems.find(i => i.name === itemNameFromAI);
+        const personTarget = state.people.find(p => p.name === personNameFromAI);
+
+        if(itemToAssign && personTarget) {
+           // We will dispatch individual ASSIGN_ITEM actions.
+           // The reducer logic needs to be careful if item names are not unique,
+           // but for now, we assume suggestion is for one instance.
+           // This is simplified: if there are multiple "Coffee" items, AI might assign one.
+           // The current implementation of SUGGESTION_SUCCESS assigns all items with matching name.
+           // We should refine this to dispatch for specific item IDs if possible or update reducer.
+           // For now, the Suggestion success in reducer uses item name.
+           assignmentsToDispatch[itemToAssign.name] = personTarget.name; 
+        }
+      }
+      
+      if (Object.keys(assignmentsToDispatch).length > 0) {
+        dispatch({ type: 'SUGGESTION_SUCCESS', payload: { assignments: assignmentsToDispatch } });
+        toast({ title: "AI Suggestion Applied", description: "Items have been assigned based on AI suggestion." });
+      } else {
+        toast({ title: "AI Suggestion", description: "AI could not make new assignments for unassigned items." });
+        dispatch({ type: 'SUGGESTION_FAILURE', payload: "No new assignments suggested by AI." });
       }
 
-      dispatch({ type: 'SUGGESTION_SUCCESS', payload: { assignments: assignmentsToDispatch } });
-      toast({ title: "AI Suggestion Applied", description: "Items have been assigned based on AI suggestion." });
 
     } catch (error) {
       console.error("Suggestion Error:", error);
@@ -177,11 +190,12 @@ export function ItemAssignmentArea() {
             <Zap className="h-7 w-7 text-primary" />
             Assign Items to People
           </CardTitle>
-          <CardDescription>Drag items from 'Unassigned' to the respective person. Or, let AI help!</CardDescription>
+          <CardDescription>Drag items from 'Unassigned' to a person or to 'Shared Items' to split them evenly.</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="flex flex-col md:flex-row gap-4 overflow-x-auto pb-4">
             <DropZone personId={null} title="Unassigned Items" items={unassignedItems} />
+            <DropZone personId="SHARED" title="Shared Items (Split Evenly)" items={sharedItems} />
             {state.people.map(person => (
               <DropZone
                 key={person.id}

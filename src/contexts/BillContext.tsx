@@ -44,7 +44,7 @@ type BillAction =
   | { type: 'UPDATE_BILL_DETAILS'; payload: Partial<BillDetails> }
   | { type: 'SET_PEOPLE_COUNT'; payload: number }
   | { type: 'UPDATE_PERSON_NAME'; payload: { id: string; name: string } }
-  | { type: 'ASSIGN_ITEM'; payload: { itemId: string; personId: string | null } }
+  | { type: 'ASSIGN_ITEM'; payload: { itemId: string; personId: string | null | 'SHARED' } }
   | { type: 'RESET_ASSIGNMENTS' }
   | { type: 'START_SUGGESTION' }
   | { type: 'SUGGESTION_SUCCESS'; payload: { assignments: Record<string, string> } } // { itemName: personName }
@@ -61,17 +61,23 @@ function billReducer(state: BillState, action: BillAction): BillState {
     case 'START_OCR':
       return { ...state, isLoadingOCR: true, error: null };
     case 'OCR_SUCCESS': {
-      const newItems = action.payload.items.map(item => ({
-        id: uuidv4(),
-        name: item.name,
-        price: item.price,
-        assignedTo: null,
-      }));
+      const newItemsFromPayload: BillItem[] = [];
+      action.payload.items.forEach(itemFromOcr => {
+        const count = itemFromOcr.quantity ?? 1;
+        for (let i = 0; i < count; i++) {
+          newItemsFromPayload.push({
+            id: uuidv4(),
+            name: itemFromOcr.name,
+            price: itemFromOcr.price,
+            assignedTo: null,
+          });
+        }
+      });
       return {
         ...state,
         isLoadingOCR: false,
         isOcrCompleted: true,
-        items: newItems,
+        items: newItemsFromPayload,
         billDetails: {
           subtotal: action.payload.subtotal ?? 0,
           vat: action.payload.vat ?? 0,
@@ -113,10 +119,10 @@ function billReducer(state: BillState, action: BillAction): BillState {
           newPeople.push({ id: uuidv4(), name: `Person ${i + 1}` });
         }
       }
-      // Unassign items from people who are removed
+      // Unassign items from people who are removed (does not affect 'SHARED' items)
       const newPeopleIds = new Set(newPeople.map(p => p.id));
       const updatedItems = state.items.map(item => 
-        item.assignedTo && !newPeopleIds.has(item.assignedTo) 
+        item.assignedTo && item.assignedTo !== 'SHARED' && !newPeopleIds.has(item.assignedTo) 
         ? { ...item, assignedTo: null } 
         : item
       );
@@ -142,11 +148,14 @@ function billReducer(state: BillState, action: BillAction): BillState {
     case 'SUGGESTION_SUCCESS': {
       const { assignments } = action.payload;
       const updatedItems = state.items.map(item => {
-        const personName = assignments[item.name];
-        if (personName) {
-          const person = state.people.find(p => p.name === personName);
-          if (person) {
-            return { ...item, assignedTo: person.id };
+        // Only attempt to assign items that are currently unassigned
+        if (item.assignedTo === null) {
+          const personName = assignments[item.name];
+          if (personName) {
+            const person = state.people.find(p => p.name === personName);
+            if (person) {
+              return { ...item, assignedTo: person.id };
+            }
           }
         }
         return item;

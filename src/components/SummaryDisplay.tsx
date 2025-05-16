@@ -4,64 +4,80 @@ import type { CalculatedPersonSummary, BillItem } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
-import { Printer, ClipboardList, UserCircle, ShoppingBag, FileText } from 'lucide-react';
+import { Printer, ClipboardList, UserCircle, ShoppingBag, FileText, Users } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 export function SummaryDisplay() {
   const { state } = useBillContext();
   const [summaries, setSummaries] = useState<CalculatedPersonSummary[]>([]);
   const [grandTotal, setGrandTotal] = useState(0);
+  const [totalSharedItemsValueForDisplay, setTotalSharedItemsValueForDisplay] = useState(0);
 
   useEffect(() => {
     const { items, people, billDetails } = state;
+
+    const billGrandTotal = billDetails.subtotal + billDetails.vat + billDetails.serviceCharge;
+    setGrandTotal(billGrandTotal);
+
     if (people.length === 0) {
       setSummaries([]);
-      setGrandTotal(0);
+      setTotalSharedItemsValueForDisplay(items.filter(item => item.assignedTo === 'SHARED').reduce((sum, item) => sum + item.price, 0));
       return;
     }
 
-    const totalBillItemsValue = items.reduce((sum, item) => sum + item.price, 0);
-    // If OCR subtotal is available and seems reasonable (e.g. close to sum of items), prefer it.
-    // For simplicity, let's use sum of items if subtotal is 0, otherwise use provided subtotal.
-    // This logic can be refined. If subtotal from OCR is significantly different from item sum, it might indicate OCR error or missed items.
-    const effectiveSubtotal = billDetails.subtotal > 0 ? billDetails.subtotal : totalBillItemsValue;
+    const sharedPoolItems = items.filter(item => item.assignedTo === 'SHARED');
+    const totalSharedItemsActualValue = sharedPoolItems.reduce((sum, item) => sum + item.price, 0);
+    setTotalSharedItemsValueForDisplay(totalSharedItemsActualValue);
+
+    const numPeople = people.length;
+    const sharedItemsPortionPerPerson = numPeople > 0 ? totalSharedItemsActualValue / numPeople : 0;
+
+    // This is the subtotal that VAT and Service Charge are based on (from the bill).
+    const ocrSubtotal = billDetails.subtotal; 
     
-    // If effectiveSubtotal is 0, no VAT/Service Charge can be distributed.
-    const canDistribute = effectiveSubtotal > 0;
+    // This is the sum of all item prices (direct + shared), used for proportioning if OCR subtotal is missing.
+    const sumOfAllItemPrices = items.reduce((sum, item) => sum + item.price, 0);
+
+    // Determine the base for calculating proportions of VAT/Service Charge.
+    // Prefer OCR subtotal. If not available or zero, use sum of all items.
+    const subtotalBaseForProportions = ocrSubtotal > 0 ? ocrSubtotal : sumOfAllItemPrices;
+
 
     const calculatedSummaries: CalculatedPersonSummary[] = people.map(person => {
-      const personItems = items.filter(item => item.assignedTo === person.id);
-      const itemsSubtotal = personItems.reduce((sum, item) => sum + item.price, 0);
+      const personDirectItems = items.filter(item => item.assignedTo === person.id);
+      const personDirectItemsSubtotal = personDirectItems.reduce((sum, item) => sum + item.price, 0);
       
-      let vatShare = 0;
-      let serviceChargeShare = 0;
+      // Each person's "effective" contribution to the subtotal includes their direct items and their share of shared items.
+      const personEffectiveSubtotalContribution = personDirectItemsSubtotal + sharedItemsPortionPerPerson;
+      
+      let personVatShare = 0;
+      let personServiceChargeShare = 0;
 
-      if (canDistribute) {
-        const personSharePercentage = itemsSubtotal / effectiveSubtotal;
-        vatShare = billDetails.vat * personSharePercentage;
-        serviceChargeShare = billDetails.serviceCharge * personSharePercentage;
+      if (subtotalBaseForProportions > 0) {
+        // Proportion relative to the determined subtotal base.
+        const personProportionOfSubtotalBase = personEffectiveSubtotalContribution / subtotalBaseForProportions;
+        personVatShare = billDetails.vat * personProportionOfSubtotalBase;
+        personServiceChargeShare = billDetails.serviceCharge * personProportionOfSubtotalBase;
+      } else if (numPeople > 0) { 
+        // If no subtotal base (e.g. all items are $0, or no OCR subtotal), split VAT/SC equally.
+        personVatShare = billDetails.vat / numPeople;
+        personServiceChargeShare = billDetails.serviceCharge / numPeople;
       }
       
-      // If totalBillItemsValue is 0 but there's overall VAT/ServiceCharge (e.g. cover charge), distribute equally.
-      // This is an edge case, typically VAT/SC are item-based.
-      // For now, if itemsSubtotal is 0, their share of VAT/SC is 0 based on proportional logic.
-      // If no items assigned but there is VAT/SC, this needs policy (e.g. equal split or manual assignment of these costs).
-      // Current logic: if a person has no items, their VAT/SC share is 0.
-
-      const totalDue = itemsSubtotal + vatShare + serviceChargeShare;
+      const totalDue = personDirectItemsSubtotal + sharedItemsPortionPerPerson + personVatShare + personServiceChargeShare;
 
       return {
         ...person,
-        items: personItems,
-        itemsSubtotal,
-        vatShare,
-        serviceChargeShare,
+        items: personDirectItems,
+        itemsSubtotal: personDirectItemsSubtotal,
+        vatShare: personVatShare,
+        serviceChargeShare: personServiceChargeShare,
+        sharedItemsPortionValue: sharedItemsPortionPerPerson,
         totalDue,
       };
     });
 
     setSummaries(calculatedSummaries);
-    setGrandTotal(effectiveSubtotal + billDetails.vat + billDetails.serviceCharge);
 
   }, [state]);
 
@@ -104,6 +120,17 @@ export function SummaryDisplay() {
         </div>
       </CardHeader>
       <CardContent className="space-y-6">
+        {totalSharedItemsValueForDisplay > 0 && state.people.length > 0 && (
+          <div className="p-4 border rounded-lg bg-muted/30">
+            <h3 className="text-md font-semibold flex items-center gap-2 text-accent-foreground">
+              <Users className="h-5 w-5" /> Shared Items Total: ${totalSharedItemsValueForDisplay.toFixed(2)}
+            </h3>
+            <p className="text-xs text-muted-foreground">
+              (Each of the {state.people.length} person(s) will have ${(totalSharedItemsValueForDisplay / state.people.length).toFixed(2)} added to their individual totals from these shared items, plus their share of associated tax/service charge)
+            </p>
+          </div>
+        )}
+
         {summaries.map(summary => (
           <div key={summary.id} className="p-4 border rounded-lg bg-card/50">
             <h3 className="text-lg font-semibold flex items-center gap-2 text-primary">
@@ -112,7 +139,7 @@ export function SummaryDisplay() {
             <Separator className="my-2" />
             {summary.items.length > 0 && (
               <div className="mb-2">
-                <h4 className="text-sm font-medium flex items-center gap-1 mb-1"><ShoppingBag className="h-4 w-4 text-muted-foreground"/>Items:</h4>
+                <h4 className="text-sm font-medium flex items-center gap-1 mb-1"><ShoppingBag className="h-4 w-4 text-muted-foreground"/>Directly Assigned Items:</h4>
                 <ul className="list-disc list-inside pl-1 text-sm space-y-0.5">
                   {summary.items.map(item => (
                     <li key={item.id} className="flex justify-between">
@@ -121,10 +148,15 @@ export function SummaryDisplay() {
                     </li>
                   ))}
                 </ul>
+                 <p className="flex justify-between text-sm mt-1 pt-1 border-t border-dashed"><span>Subtotal (Direct Items):</span> <span>${summary.itemsSubtotal.toFixed(2)}</span></p>
               </div>
             )}
+             {summary.items.length === 0 && (
+                <p className="text-sm text-muted-foreground mb-2">No items directly assigned.</p>
+             )}
+
             <div className="text-sm space-y-1 mt-2 pt-2 border-t border-dashed">
-              <p className="flex justify-between"><span>Items Subtotal:</span> <span>${summary.itemsSubtotal.toFixed(2)}</span></p>
+              <p className="flex justify-between"><span>Portion of Shared Items:</span> <span>${summary.sharedItemsPortionValue.toFixed(2)}</span></p>
               <p className="flex justify-between"><span>VAT/Tax Share:</span> <span>${summary.vatShare.toFixed(2)}</span></p>
               <p className="flex justify-between"><span>Service Charge Share:</span> <span>${summary.serviceChargeShare.toFixed(2)}</span></p>
               <Separator className="my-1" />
@@ -136,8 +168,11 @@ export function SummaryDisplay() {
           </div>
         ))}
         {summaries.length === 0 && state.people.length > 0 && (
-            <p className="text-muted-foreground text-center py-4">No items assigned yet, or no items on the bill.</p>
+            <p className="text-muted-foreground text-center py-4">No items assigned yet, or no items on the bill for individuals.</p>
         )}
+         {state.people.length === 0 && state.items.length > 0 && (
+           <p className="text-muted-foreground text-center py-4">Add people to see individual summaries.</p>
+         )}
       </CardContent>
       <CardFooter className="border-t pt-4">
         <div className="w-full text-right">
@@ -146,7 +181,7 @@ export function SummaryDisplay() {
             Grand Total Bill: ${grandTotal.toFixed(2)}
           </p>
           <p className="text-xs text-muted-foreground mt-1">
-            (Calculated as Subtotal: ${state.billDetails.subtotal.toFixed(2)} + VAT: ${state.billDetails.vat.toFixed(2)} + Service: ${state.billDetails.serviceCharge.toFixed(2)})
+            (Subtotal: ${state.billDetails.subtotal.toFixed(2)} + VAT/Tax: ${state.billDetails.vat.toFixed(2)} + Service Charge: ${state.billDetails.serviceCharge.toFixed(2)})
           </p>
         </div>
       </CardFooter>
