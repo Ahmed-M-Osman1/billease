@@ -1,4 +1,3 @@
-
 "use client";
 import { useState, type ChangeEvent } from 'react';
 import { useBillContext } from '@/contexts/BillContext';
@@ -9,12 +8,17 @@ import { Switch } from '@/components/ui/switch';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { extractBillItems } from '@/ai/flows/bill-item-extraction';
 import { useToast } from '@/hooks/use-toast';
-import { UploadCloud, FileText, XCircle, Loader2 } from 'lucide-react';
+import { UploadCloud, FileText, XCircle, Loader2, Camera } from 'lucide-react';
+import { useIsMobile } from '@/hooks/use-mobile';
+import { Dialog, DialogContent, DialogTrigger } from '@/components/ui/dialog';
+import { CameraCapture } from './CameraCapture';
 
 export function BillUploadForm() {
   const { state, dispatch } = useBillContext();
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [isCameraDialogOpen, setIsCameraDialogOpen] = useState(false);
   const { toast } = useToast();
+  const isMobile = useIsMobile();
 
   const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
     if (event.target.files && event.target.files[0]) {
@@ -31,9 +35,14 @@ export function BillUploadForm() {
     }
   };
 
+  const handleCapture = (dataUri: string) => {
+    dispatch({ type: 'SET_BILL_IMAGE', payload: { name: `capture-${Date.now()}.jpg`, dataUri }});
+    setIsCameraDialogOpen(false);
+  };
+
   const handleExtractItems = async () => {
     if (!state.billImageDataUri) {
-      toast({ title: "No image selected", description: "Please upload a bill image first.", variant: "destructive" });
+      toast({ title: "No image selected", description: "Please upload or scan a bill image first.", variant: "destructive" });
       return;
     }
     dispatch({ type: 'START_OCR' });
@@ -56,19 +65,35 @@ export function BillUploadForm() {
           <UploadCloud className="h-6 w-6 text-primary" />
           Upload Bill
         </CardTitle>
-        <CardDescription>Upload a photo of your restaurant bill to get started.</CardDescription>
+        <CardDescription>Upload a photo or scan your bill to get started.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         <div>
-          <Label htmlFor="bill-image" className="sr-only">Bill Image</Label>
-          <Input
-            id="bill-image"
-            type="file"
-            accept="image/*"
-            onChange={handleFileChange}
-            className="file:text-sm file:font-medium file:text-primary-foreground file:bg-primary hover:file:bg-primary/90 file:rounded-md file:px-3 file:py-1.5 file:border-0"
-            aria-describedby="file-upload-status"
-          />
+          {isMobile ? (
+            <Dialog open={isCameraDialogOpen} onOpenChange={setIsCameraDialogOpen}>
+              <DialogTrigger asChild>
+                <Button variant="outline" className="w-full">
+                  <Camera className="mr-2" />
+                  Scan with Camera
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-lg p-4">
+                 <CameraCapture onCapture={handleCapture} onClose={() => setIsCameraDialogOpen(false)} />
+              </DialogContent>
+            </Dialog>
+          ) : (
+             <>
+              <Label htmlFor="bill-image" className="sr-only">Bill Image</Label>
+              <Input
+                id="bill-image"
+                type="file"
+                accept="image/*"
+                onChange={handleFileChange}
+                className="file:text-sm file:font-medium file:text-primary-foreground file:bg-primary hover:file:bg-primary/90 file:rounded-md file:px-3 file:py-1.5 file:border-0"
+                aria-describedby="file-upload-status"
+              />
+            </>
+          )}
         </div>
         {state.billImageName && (
           <div id="file-upload-status" className="text-sm text-muted-foreground flex items-center justify-between p-2 border rounded-md">
@@ -93,8 +118,8 @@ export function BillUploadForm() {
           />
           <Label htmlFor="ocr-price-mode" className="text-sm text-foreground/90 leading-tight">
             {state.ocrPriceMode === 'unit'
-              ? "Price is for one item (e.g., 2 Fries @ $5 ea.)"
-              : "Price is total for quantity (e.g., 2 Fries for $10 total)"}
+              ? "Price is for one item (e.g., 2 Fries @ 30 EGP ea.)"
+              : "Price is total for quantity (e.g., 2 Fries for 60 EGP total)"}
           </Label>
         </div>
         

@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { ListChecks, Trash2, PlusCircle, Edit3, DollarSign, Percent } from 'lucide-react';
+import { ListChecks, Trash2, PlusCircle } from 'lucide-react';
 import type { BillItem } from '@/lib/types';
 import type { ChangeEvent } from 'react';
 
@@ -69,14 +69,17 @@ export function BillItemsManager() {
                     onChange={(e) => handleItemChange(item.id, 'name', e.target.value)}
                     className="flex-grow"
                   />
-                  <Input
-                    type="number"
-                    aria-label="Item price"
-                    value={item.price}
-                    onChange={(e) => handleItemChange(item.id, 'price', e.target.value)}
-                    className="w-24 text-right"
-                    step="0.01"
-                  />
+                  <div className="relative">
+                    <Input
+                      type="number"
+                      aria-label="Item price"
+                      value={item.price}
+                      onChange={(e) => handleItemChange(item.id, 'price', e.target.value)}
+                      className="w-28 text-right pr-10"
+                      step="0.01"
+                    />
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">EGP</span>
+                  </div>
                   <Button variant="ghost" size="icon" onClick={() => dispatch({ type: 'DELETE_ITEM', payload: item.id })} aria-label="Delete item">
                     <Trash2 className="h-4 w-4 text-destructive" />
                   </Button>
@@ -95,40 +98,40 @@ export function BillItemsManager() {
             <div>
               <Label htmlFor="subtotal">Subtotal</Label>
               <div className="relative mt-1">
-                <DollarSign className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
                   id="subtotal"
                   type="number"
                   value={state.billDetails.subtotal}
                   onChange={(e: ChangeEvent<HTMLInputElement>) => handleBillDetailChange('subtotal', e.target.value)}
-                  className="pl-7 text-right" step="0.01"
+                  className="text-right pr-10" step="0.01"
                 />
+                 <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">EGP</span>
               </div>
             </div>
             <div>
               <Label htmlFor="vat">VAT/Tax</Label>
                <div className="relative mt-1">
-                <DollarSign className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
                   id="vat"
                   type="number"
                   value={state.billDetails.vat}
                   onChange={(e: ChangeEvent<HTMLInputElement>) => handleBillDetailChange('vat', e.target.value)}
-                  className="pl-7 text-right" step="0.01"
+                  className="text-right pr-10" step="0.01"
                 />
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">EGP</span>
               </div>
             </div>
             <div>
               <Label htmlFor="serviceCharge">Service Charge</Label>
               <div className="relative mt-1">
-                <DollarSign className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
                   id="serviceCharge"
                   type="number"
                   value={state.billDetails.serviceCharge}
                   onChange={(e: ChangeEvent<HTMLInputElement>) => handleBillDetailChange('serviceCharge', e.target.value)}
-                  className="pl-7 text-right" step="0.01"
+                  className="text-right pr-10" step="0.01"
                 />
+                 <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">EGP</span>
               </div>
             </div>
           </div>
@@ -136,7 +139,7 @@ export function BillItemsManager() {
       </CardContent>
        <CardFooter>
         <p className="text-sm text-muted-foreground">
-          Total (auto-calculated from above): $ {(state.billDetails.subtotal + state.billDetails.vat + state.billDetails.serviceCharge).toFixed(2)}
+          Total (auto-calculated from above): {(state.billDetails.subtotal + state.billDetails.vat + state.billDetails.serviceCharge).toFixed(2)} EGP
         </p>
       </CardFooter>
     </Card>

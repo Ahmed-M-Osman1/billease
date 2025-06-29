@@ -1,4 +1,3 @@
-
 "use client";
 import { useBillContext } from '@/contexts/BillContext';
 import type { CalculatedPersonSummary, CustomSharedPool } from '@/lib/types';
@@ -166,13 +165,13 @@ export function SummaryDisplay() {
               <TableRow>
                 <TableCell className="font-medium border-r">Direct Items Subtotal</TableCell>
                 {summaries.map(person => (
-                  <TableCell key={person.id} className="text-right border-r last:border-r-0">${person.itemsSubtotal.toFixed(2)}</TableCell>
+                  <TableCell key={person.id} className="text-right border-r last:border-r-0">{person.itemsSubtotal.toFixed(2)} EGP</TableCell>
                 ))}
               </TableRow>
               <TableRow>
                 <TableCell className="font-medium border-r">Share from "All People" Pool</TableCell>
                 {summaries.map(person => (
-                  <TableCell key={person.id} className="text-right border-r last:border-r-0">${person.sharedItemsPortionValue.toFixed(2)}</TableCell>
+                  <TableCell key={person.id} className="text-right border-r last:border-r-0">{person.sharedItemsPortionValue.toFixed(2)} EGP</TableCell>
                 ))}
               </TableRow>
               {/* Rows for active custom shared pools */}
@@ -181,7 +180,7 @@ export function SummaryDisplay() {
                   <TableCell className="font-medium border-r">Share from "{pool.name}"</TableCell>
                   {summaries.map(personSummary => (
                     <TableCell key={personSummary.id} className="text-right border-r last:border-r-0">
-                      ${getPersonCustomPoolShare(personSummary, pool.id).toFixed(2)}
+                      {getPersonCustomPoolShare(personSummary, pool.id).toFixed(2)} EGP
                     </TableCell>
                   ))}
                 </TableRow>
@@ -190,31 +189,31 @@ export function SummaryDisplay() {
                 <TableCell className="font-medium border-r">Subtotal (All Items & Shares)</TableCell>
                 {summaries.map(person => (
                    <TableCell key={person.id} className="text-right font-medium border-r last:border-r-0">
-                    ${(
+                    {(
                       person.itemsSubtotal +
                       person.sharedItemsPortionValue +
                       (person.customSharedPoolContributions?.reduce((sum, c) => sum + c.amount, 0) || 0)
-                    ).toFixed(2)}
+                    ).toFixed(2)} EGP
                   </TableCell>
                 ))}
               </TableRow>
               <TableRow>
                 <TableCell className="font-medium border-r">VAT/Tax Share</TableCell>
                 {summaries.map(person => (
-                  <TableCell key={person.id} className="text-right border-r last:border-r-0">${person.vatShare.toFixed(2)}</TableCell>
+                  <TableCell key={person.id} className="text-right border-r last:border-r-0">{person.vatShare.toFixed(2)} EGP</TableCell>
                 ))}
               </TableRow>
               <TableRow>
                 <TableCell className="font-medium border-r">Service Charge Share</TableCell>
                 {summaries.map(person => (
-                  <TableCell key={person.id} className="text-right border-r last:border-r-0">${person.serviceChargeShare.toFixed(2)}</TableCell>
+                  <TableCell key={person.id} className="text-right border-r last:border-r-0">{person.serviceChargeShare.toFixed(2)} EGP</TableCell>
                 ))}
               </TableRow>
               <TableRow className="border-t-2 border-primary">
                 <TableCell className="font-bold text-lg border-r">TOTAL DUE</TableCell>
                 {summaries.map(person => (
                   <TableCell key={person.id} className="text-right font-bold text-lg text-primary border-r last:border-r-0">
-                    ${person.totalDue.toFixed(2)}
+                    {person.totalDue.toFixed(2)} EGP
                   </TableCell>
                 ))}
               </TableRow>
@@ -238,13 +237,13 @@ export function SummaryDisplay() {
         <div className="w-full text-right">
           <p className="text-xl font-bold flex items-center justify-end gap-2">
              <FileText className="h-6 w-6 text-foreground"/>
-            Grand Total (from Bill): ${grandTotal.toFixed(2)}
+            Grand Total (from Bill): {grandTotal.toFixed(2)} EGP
           </p>
           <p className="text-xs text-muted-foreground mt-1">
-            (Bill Subtotal: ${state.billDetails.subtotal.toFixed(2)} + VAT/Tax: ${state.billDetails.vat.toFixed(2)} + Service Charge: ${state.billDetails.serviceCharge.toFixed(2)})
+            (Bill Subtotal: {state.billDetails.subtotal.toFixed(2)} + VAT/Tax: {state.billDetails.vat.toFixed(2)} + Service Charge: {state.billDetails.serviceCharge.toFixed(2)}) EGP
           </p>
            <p className="text-xs text-muted-foreground mt-0.5">
-            (Sum of all item prices currently entered: ${state.items.reduce((acc, item) => acc + item.price, 0).toFixed(2)})
+            (Sum of all item prices currently entered: {state.items.reduce((acc, item) => acc + item.price, 0).toFixed(2)}) EGP
           </p>
         </div>
       </CardFooter>
