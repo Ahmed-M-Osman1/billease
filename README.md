@@ -1,5 +1,8 @@
-# Firebase Studio
+## BillEase
 
-This is a NextJS starter in Firebase Studio.
+AI generated bill split system
 
-To get started, take a look at src/app/page.tsx.
+Vibe Coding.
+
+https://github.com/user-attachments/assets/f44cda5d-153f-4191-a09e-dd04bc64441d
+
