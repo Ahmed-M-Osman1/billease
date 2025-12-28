@@ -36,6 +36,7 @@ const ExtractBillItemsOutputSchema = z.object({
     .number()
     .optional()
     .describe('The service charge amount from the bill, if available.'),
+    delivery: z.number().optional().describe('The delivery amount from the bill, if available.'),
 });
 export type ExtractBillItemsOutput = z.infer<typeof ExtractBillItemsOutputSchema>;
 
@@ -53,7 +54,7 @@ You will receive a photo of a bill and you will extract all line items, their na
 If an item has a quantity (e.g., "2x Fries" or "Fries ..... 2 ..... $price_each"), please return the item name as "Fries", its quantity as 2, and the price for a *single unit* of Fries.
 If quantity is not specified or is 1, return quantity as 1. Ensure the price is for a single item, not the total for multiple quantities of the same line item.
 
-Also extract subtotal, VAT, and service charge from the image, if present.
+Also extract subtotal, VAT, delivery and service charge from the image, if present.
 
 Return the data in JSON format. If a value is not present in the image, omit it from the JSON.
 

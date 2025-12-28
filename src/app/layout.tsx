@@ -14,8 +14,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'BillEase',
-  description: 'Split bills with ease.',
+  title: 'BillEasy',
+  description: 'Split bills. Easy!.',
 };
 
 export default function RootLayout({

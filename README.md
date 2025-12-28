@@ -1,4 +1,4 @@
-## BillEase
+## BillEasy
 
 AI generated bill split system
 

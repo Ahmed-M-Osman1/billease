@@ -1,4 +1,4 @@
-# **App Name**: BillEase
+# **App Name**: BillEasy
 
 ## Core Features:
 

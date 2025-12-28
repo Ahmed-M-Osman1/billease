@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button';
 import { RotateCcw } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 
-function BillEaseApp() {
+function BillEasyApp() {
   const { dispatch } = useBillContext();
 
   const handleResetApp = () => {
@@ -23,7 +23,7 @@ function BillEaseApp() {
       }
     }
   };
-  
+
   return (
     <div className="min-h-screen flex flex-col bg-background text-foreground">
       <AppHeader />
@@ -42,16 +42,16 @@ function BillEaseApp() {
             <SummaryDisplay />
           </div>
         </div>
-        
+
         <div className="mt-8 pt-6 border-t flex justify-end">
             <Button variant="destructive" onClick={handleResetApp} className="bg-destructive hover:bg-destructive/90">
               <RotateCcw className="mr-2 h-4 w-4" /> Reset Entire App
             </Button>
         </div>
-        
+
         <Card className="mt-8 bg-muted/30">
           <CardContent className="p-6">
-            <h3 className="text-lg font-semibold mb-2">How to Use BillEase:</h3>
+            <h3 className="text-lg font-semibold mb-2">How to Use BillEasy:</h3>
             <ol className="list-decimal list-inside space-y-1 text-sm text-muted-foreground">
               <li><strong className="text-foreground/80">Upload Bill:</strong> Click to upload a clear photo of your bill. Then click "Extract Items".</li>
               <li><strong className="text-foreground/80">Add People:</strong> Enter the number of people splitting the bill and their names.</li>
@@ -64,7 +64,7 @@ function BillEaseApp() {
 
       </main>
       <footer className="py-4 text-center text-sm text-muted-foreground border-t">
-        BillEase &copy; {new Date().getFullYear()} - Split bills effortlessly.
+        BillEasy &copy; {new Date().getFullYear()} - Split bills effortlessly.
       </footer>
     </div>
   );
@@ -73,7 +73,7 @@ function BillEaseApp() {
 export default function Home() {
   return (
     <BillProvider>
-      <BillEaseApp />
+      <BillEasyApp />
     </BillProvider>
   );
 }
