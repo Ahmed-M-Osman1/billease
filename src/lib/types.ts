@@ -1,4 +1,3 @@
-
 export interface BillItem {
   id: string;
   name: string;
@@ -21,6 +20,7 @@ export interface BillDetails {
   subtotal: number;
   vat: number;
   serviceCharge: number;
+  delivery: number;
 }
 
 export interface CalculatedPersonSummary extends Person {
@@ -29,7 +29,10 @@ export interface CalculatedPersonSummary extends Person {
   vatShare: number;
   serviceChargeShare: number;
   sharedItemsPortionValue: number; // Value from 'SHARED_ALL_PEOPLE' items
-  customSharedPoolContributions?: Array<{ poolId: string; poolName: string; amount: number }>; // Contributions from custom shared pools
+  customSharedPoolContributions?: Array<{
+    poolId: string;
+    poolName: string;
+    amount: number;
+  }>; // Contributions from custom shared pools
   totalDue: number;
 }
-
