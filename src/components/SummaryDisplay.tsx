@@ -179,13 +179,49 @@ export function SummaryDisplay() {
     if (!cardRef.current) return;
 
     try {
-      // Capture the card element as canvas
-      const canvas = await html2canvas(cardRef.current, {
-        scale: 2, // Higher quality
+      // Clone the element to manipulate without affecting the view
+      const clonedElement = cardRef.current.cloneNode(
+        true
+      ) as HTMLElement;
+
+      // Apply fixed styling to the clone for image generation
+      clonedElement.style.position = 'fixed';
+      clonedElement.style.left = '-9999px';
+      clonedElement.style.width = '1200px'; // Fixed width for consistent image
+      clonedElement.style.minWidth = '1200px';
+      clonedElement.style.maxWidth = '1200px';
+
+      // Find table in cloned element and make it fit properly
+      const table = clonedElement.querySelector('table');
+      if (table) {
+        (table as HTMLElement).style.width = '100%';
+        (table as HTMLElement).style.tableLayout = 'fixed';
+        (table as HTMLElement).style.fontSize = '12px'; // Smaller font for better fit
+      }
+
+      // Find all table cells and adjust for better fit
+      const cells = clonedElement.querySelectorAll('th, td');
+      cells.forEach((cell) => {
+        (cell as HTMLElement).style.whiteSpace = 'normal';
+        (cell as HTMLElement).style.wordBreak = 'break-word';
+        (cell as HTMLElement).style.padding = '8px';
+      });
+
+      // Append clone to body temporarily
+      document.body.appendChild(clonedElement);
+
+      // Capture the cloned element as canvas
+      const canvas = await html2canvas(clonedElement, {
+        scale: 2,
         backgroundColor: '#ffffff',
         logging: false,
         useCORS: true,
+        width: 1200,
+        windowWidth: 1200,
       });
+
+      // Remove the cloned element
+      document.body.removeChild(clonedElement);
 
       // Convert canvas to blob
       canvas.toBlob((blob) => {
@@ -409,8 +445,8 @@ export function SummaryDisplay() {
         )}
       </CardContent>
       <CardFooter className="border-t pt-4">
-        <div className="w-full text-right">
-          <p className="text-xl font-bold flex items-center justify-end gap-2">
+        <div className="w-full text-left">
+          <p className="text-xl font-bold flex items-center gap-2">
             <FileText className="h-6 w-6 text-foreground" />
             Grand Total (from Bill): {grandTotal.toFixed(2)} EGP
           </p>
