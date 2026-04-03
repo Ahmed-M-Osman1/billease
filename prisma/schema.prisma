@@ -1,0 +1,210 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// NextAuth models
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String    @unique
+  emailVerified DateTime?
+  image         String?
+  password      String?
+  currency      String    @default("EGP")
+  theme         String    @default("system")
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  accounts Account[]
+  sessions Session[]
+  bills    Bill[]
+  friends  Friend[]  @relation("UserFriends")
+  friendOf Friend[]  @relation("FriendOf")
+  groups   Group[]
+
+  @@map("users")
+}
+
+model Account {
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([provider, providerAccountId])
+  @@map("accounts")
+}
+
+model Session {
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("sessions")
+}
+
+model VerificationToken {
+  identifier String
+  token      String
+  expires    DateTime
+
+  @@id([identifier, token])
+  @@map("verification_tokens")
+}
+
+// App models
+model Friend {
+  id        String   @id @default(cuid())
+  userId    String
+  friendId  String
+  nickname  String?
+  createdAt DateTime @default(now())
+
+  user   User @relation("UserFriends", fields: [userId], references: [id], onDelete: Cascade)
+  friend User @relation("FriendOf", fields: [friendId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, friendId])
+  @@map("friends")
+}
+
+model Group {
+  id        String        @id @default(cuid())
+  userId    String
+  name      String
+  createdAt DateTime      @default(now())
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  members   GroupMember[]
+
+  @@map("groups")
+}
+
+model GroupMember {
+  groupId String
+  userId  String
+  group   Group  @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@id([groupId, userId])
+  @@map("group_members")
+}
+
+model Bill {
+  id              String   @id @default(cuid())
+  userId          String
+  title           String
+  imageUrl        String?
+  date            DateTime @default(now())
+  currency        String   @default("EGP")
+  subtotal        Float    @default(0)
+  vat             Float    @default(0)
+  serviceCharge   Float    @default(0)
+  delivery        Float    @default(0)
+  tip             Float    @default(0)
+  tipMode         String   @default("none")
+  status          String   @default("draft")
+  shareToken      String?  @unique
+  isCollaborative Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user         User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  participants BillParticipant[]
+  items        BillItem[]
+  splitGroups  BillSplitGroup[]
+  settlements  Settlement[]
+
+  @@index([userId])
+  @@index([date(sort: Desc)])
+  @@index([shareToken])
+  @@map("bills")
+}
+
+model BillParticipant {
+  id        String    @id @default(cuid())
+  billId    String
+  name      String
+  color     String?
+  isSettled Boolean   @default(false)
+  settledAt DateTime?
+
+  bill        Bill         @relation(fields: [billId], references: [id], onDelete: Cascade)
+  items       BillItem[]
+  settlements Settlement[]
+
+  @@index([billId])
+  @@map("bill_participants")
+}
+
+model BillSplitGroup {
+  id     String @id @default(cuid())
+  billId String
+  name   String
+
+  bill    Bill               @relation(fields: [billId], references: [id], onDelete: Cascade)
+  items   BillItem[]
+  members SplitGroupMember[]
+
+  @@map("bill_split_groups")
+}
+
+model SplitGroupMember {
+  groupId       String
+  participantId String
+
+  group BillSplitGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@id([groupId, participantId])
+  @@map("split_group_members")
+}
+
+model BillItem {
+  id             String  @id @default(cuid())
+  billId         String
+  name           String
+  price          Float
+  quantity       Int     @default(1)
+  assignedToId   String? @map("assigned_to")
+  assignmentType String  @default("individual")
+  sharedGroupId  String?
+
+  bill        Bill             @relation(fields: [billId], references: [id], onDelete: Cascade)
+  assignedTo  BillParticipant? @relation(fields: [assignedToId], references: [id])
+  sharedGroup BillSplitGroup?  @relation(fields: [sharedGroupId], references: [id])
+
+  @@index([billId])
+  @@map("bill_items")
+}
+
+model Settlement {
+  id            String    @id @default(cuid())
+  billId        String
+  participantId String
+  amount        Float
+  isPaid        Boolean   @default(false)
+  paidAt        DateTime?
+
+  bill        Bill            @relation(fields: [billId], references: [id], onDelete: Cascade)
+  participant BillParticipant @relation(fields: [participantId], references: [id])
+
+  @@map("settlements")
+}

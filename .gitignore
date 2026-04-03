@@ -39,7 +39,9 @@ next-env.d.ts
 
 .genkit/*
 .env*
+.superpowers/
 
 # firebase
 firebase-debug.log
 firestore-debug.log
+/src/generated/prisma
