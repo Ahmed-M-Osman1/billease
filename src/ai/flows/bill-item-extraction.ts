@@ -69,8 +69,14 @@ export type ExtractBillItemsOutput = z.infer<
 
 export async function extractBillItems(
   input: ExtractBillItemsInput
-): Promise<ExtractBillItemsOutput> {
-  return extractBillItemsFlow(input);
+): Promise<{ success: true; data: ExtractBillItemsOutput } | { success: false; error: string }> {
+  try {
+    const data = await extractBillItemsFlow(input);
+    return { success: true, data };
+  } catch (err: any) {
+    console.error('extractBillItems error:', err);
+    return { success: false, error: err.message ?? 'Extraction failed' };
+  }
 }
 
 const prompt = ai.definePrompt({

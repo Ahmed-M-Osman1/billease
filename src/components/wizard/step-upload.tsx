@@ -44,8 +44,11 @@ export function StepUpload() {
     store.startOCR()
     try {
       const result = await extractBillItems({ photoDataUri: store.billImageDataUri })
-      store.ocrSuccess(result)
-      toast({ title: 'Items extracted', description: `Found ${result.items.length} items` })
+      if (!result.success) {
+        throw new Error(result.error)
+      }
+      store.ocrSuccess(result.data)
+      toast({ title: 'Items extracted', description: `Found ${result.data.items.length} items` })
     } catch (err: any) {
       store.ocrFailure(err.message ?? 'OCR failed')
       toast({ variant: 'destructive', title: 'Extraction failed', description: err.message })

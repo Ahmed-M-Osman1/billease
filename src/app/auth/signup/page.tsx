@@ -1,8 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import { Suspense, useState } from 'react'
 import { signIn } from 'next-auth/react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -10,13 +10,15 @@ import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { Loader2, Receipt } from 'lucide-react'
 
-export default function SignupPage() {
+function SignupPageContent() {
   const [fullName, setFullName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const callbackUrl = searchParams.get('callbackUrl') || '/'
 
   async function handleSignup(e: React.FormEvent) {
     e.preventDefault()
@@ -42,6 +44,7 @@ export default function SignupPage() {
       const result = await signIn('credentials', {
         email,
         password,
+        callbackUrl,
         redirect: false,
       })
 
@@ -49,7 +52,7 @@ export default function SignupPage() {
         setError('Account created but login failed. Please sign in.')
         setLoading(false)
       } else {
-        router.push('/')
+        router.push(result?.url || callbackUrl)
         router.refresh()
       }
     } catch (err: any) {
@@ -113,13 +116,28 @@ export default function SignupPage() {
         </form>
       </CardContent>
       <CardFooter className="justify-center">
-        <p className="text-sm text-muted-foreground">
+        <p className="text-center text-sm text-muted-foreground">
           Already have an account?{' '}
-          <Link href="/auth/login" className="text-primary hover:underline font-medium">
+          <Link
+            href={`/auth/login${callbackUrl !== '/' ? `?callbackUrl=${encodeURIComponent(callbackUrl)}` : ''}`}
+            className="text-primary hover:underline font-medium"
+          >
             Sign in
+          </Link>
+          {' · '}
+          <Link href="/guest" className="text-primary hover:underline font-medium">
+            Continue as guest
           </Link>
         </p>
       </CardFooter>
     </Card>
+  )
+}
+
+export default function SignupPage() {
+  return (
+    <Suspense fallback={null}>
+      <SignupPageContent />
+    </Suspense>
   )
 }

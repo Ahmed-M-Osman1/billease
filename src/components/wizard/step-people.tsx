@@ -15,6 +15,7 @@ import { Plus, Users } from 'lucide-react'
 
 export function StepPeople() {
   const store = useBillStore()
+  const manualPools = store.customSharedPools.filter((pool) => pool.kind !== 'auto')
   const [newName, setNewName] = useState('')
   const [groupName, setGroupName] = useState('')
   const [selectedIds, setSelectedIds] = useState<string[]>([])
@@ -152,10 +153,10 @@ export function StepPeople() {
               </Dialog>
             </div>
           </CardHeader>
-          {store.customSharedPools.length > 0 && (
+          {manualPools.length > 0 && (
             <CardContent className="pt-0">
               <div className="space-y-2">
-                {store.customSharedPools.map((pool) => (
+                {manualPools.map((pool) => (
                   <div
                     key={pool.id}
                     className="flex items-center justify-between rounded-lg bg-muted/50 px-3 py-2"

@@ -18,6 +18,7 @@ export interface CustomSharedPool {
   id: string;
   name: string;
   personIds: string[]; // IDs of people in this specific pool
+  kind?: 'manual' | 'auto';
 }
 
 export interface BillDetails {
