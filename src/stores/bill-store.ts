@@ -87,6 +87,7 @@ interface BillStoreActions {
 
   // Assignment
   assignItem: (itemId: string, targetId: string | null) => void
+  assignItemToPeople: (itemId: string, personIds: string[]) => void
   resetAssignments: () => void
 
   // AI suggestions
@@ -124,6 +125,49 @@ const initialState: BillStoreState = {
   isLoadingSuggestion: false,
   ocrPriceMode: 'unit',
   error: null,
+}
+
+function normalizePersonIds(personIds: string[]) {
+  return [...new Set(personIds)].sort()
+}
+
+function getAutoPoolName(people: WizardPerson[], personIds: string[]) {
+  const labels = personIds
+    .map((personId) => people.find((person) => person.id === personId)?.name?.trim())
+    .filter(Boolean) as string[]
+
+  if (labels.length === 0) return 'Shared split'
+  if (labels.length <= 3) return labels.join(' + ')
+  return `${labels.slice(0, 2).join(' + ')} +${labels.length - 2} more`
+}
+
+function syncAutoPools(
+  pools: CustomSharedPool[],
+  people: WizardPerson[]
+) {
+  return pools
+    .map((pool) => {
+      const nextPersonIds = pool.personIds.filter((personId) =>
+        people.some((person) => person.id === personId)
+      )
+
+      if (nextPersonIds.length === 0) return null
+
+      if (pool.kind === 'auto') {
+        if (nextPersonIds.length < 2) return null
+        return {
+          ...pool,
+          personIds: normalizePersonIds(nextPersonIds),
+          name: getAutoPoolName(people, nextPersonIds),
+        }
+      }
+
+      return {
+        ...pool,
+        personIds: nextPersonIds,
+      }
+    })
+    .filter(Boolean) as CustomSharedPool[]
 }
 
 export const useBillStore = create<BillStoreState & BillStoreActions>()(
@@ -222,23 +266,20 @@ export const useBillStore = create<BillStoreState & BillStoreActions>()(
       addPerson: (name) =>
         set((s) => {
           const colorIndex = s.people.length % PERSON_COLORS.length
+          const people = [
+            ...s.people,
+            { id: uuidv4(), name, color: PERSON_COLORS[colorIndex] },
+          ]
           return {
-            people: [
-              ...s.people,
-              { id: uuidv4(), name, color: PERSON_COLORS[colorIndex] },
-            ],
+            people,
+            customSharedPools: syncAutoPools(s.customSharedPools, people),
           }
         }),
       removePerson: (personId) =>
         set((s) => {
           const newPeople = s.people.filter((p) => p.id !== personId)
+          const updatedPools = syncAutoPools(s.customSharedPools, newPeople)
           const newPeopleIds = new Set(newPeople.map((p) => p.id))
-          const updatedPools = s.customSharedPools
-            .map((pool) => ({
-              ...pool,
-              personIds: pool.personIds.filter((pid) => newPeopleIds.has(pid)),
-            }))
-            .filter((pool) => pool.personIds.length > 0)
           const poolIds = new Set(updatedPools.map((p) => p.id))
           return {
             people: newPeople,
@@ -257,9 +298,13 @@ export const useBillStore = create<BillStoreState & BillStoreActions>()(
           }
         }),
       updatePersonName: (id, name) =>
-        set((s) => ({
-          people: s.people.map((p) => (p.id === id ? { ...p, name } : p)),
-        })),
+        set((s) => {
+          const people = s.people.map((p) => (p.id === id ? { ...p, name } : p))
+          return {
+            people,
+            customSharedPools: syncAutoPools(s.customSharedPools, people),
+          }
+        }),
       setPeople: (people) => set({ people }),
 
       // Pools
@@ -267,7 +312,7 @@ export const useBillStore = create<BillStoreState & BillStoreActions>()(
         set((s) => ({
           customSharedPools: [
             ...s.customSharedPools,
-            { id: uuidv4(), name, personIds },
+            { id: uuidv4(), name, personIds, kind: 'manual' },
           ],
         })),
       updateCustomPool: (pool) =>
@@ -291,6 +336,45 @@ export const useBillStore = create<BillStoreState & BillStoreActions>()(
             item.id === itemId ? { ...item, assignedTo: targetId } : item
           ),
         })),
+      assignItemToPeople: (itemId, personIds) =>
+        set((s) => {
+          const normalizedIds = normalizePersonIds(personIds)
+
+          let targetId: string | null = null
+          let customSharedPools = s.customSharedPools
+
+          if (normalizedIds.length === s.people.length && s.people.length > 1) {
+            targetId = 'SHARED_ALL_PEOPLE'
+          } else if (normalizedIds.length === 1) {
+            targetId = normalizedIds[0]
+          } else if (normalizedIds.length > 1) {
+            const existingPool = s.customSharedPools.find(
+              (pool) =>
+                pool.kind === 'auto' &&
+                normalizePersonIds(pool.personIds).join('|') === normalizedIds.join('|')
+            )
+
+            if (existingPool) {
+              targetId = existingPool.id
+            } else {
+              const newPool = {
+                id: uuidv4(),
+                name: getAutoPoolName(s.people, normalizedIds),
+                personIds: normalizedIds,
+                kind: 'auto' as const,
+              }
+              customSharedPools = [...s.customSharedPools, newPool]
+              targetId = newPool.id
+            }
+          }
+
+          return {
+            customSharedPools,
+            items: s.items.map((item) =>
+              item.id === itemId ? { ...item, assignedTo: targetId } : item
+            ),
+          }
+        }),
       resetAssignments: () =>
         set((s) => ({
           items: s.items.map((item) => ({ ...item, assignedTo: null })),

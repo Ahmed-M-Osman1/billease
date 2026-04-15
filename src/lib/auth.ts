@@ -48,6 +48,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       const { pathname } = request.nextUrl
       const isPublic =
         pathname.startsWith('/auth') ||
+        pathname.startsWith('/guest') ||
         pathname.includes('/collaborate')
 
       if (!auth && !isPublic) return false

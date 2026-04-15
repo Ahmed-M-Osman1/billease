@@ -15,7 +15,7 @@ const ExtractBillItemsInputSchema = z.object({
   photoDataUri: z
     .string()
     .describe(
-      "A photo of a restaurant bill, as a data URI that must include a MIME type and use Base64 encoding. Expected format: 'data:<mimetype>;base64,<encoded_data>'."
+      "A photo of a restaurant bill, as a data URI that must include a MIME type and use Base64 encoding. Expected format: 'data:<mimetype>;base64,<encoded_data>'.",
     ),
 });
 export type ExtractBillItemsInput = z.infer<
@@ -30,18 +30,18 @@ const ExtractBillItemsOutputSchema = z.object({
         price: z
           .number()
           .describe(
-            'The unit price of the item. If a quantity is specified, this should be the price for a single item.'
+            'The unit price of the item. If a quantity is specified, this should be the price for a single item.',
           ),
         quantity: z
           .number()
           .optional()
           .describe(
-            'The quantity of this item. Defaults to 1 if not specified.'
+            'The quantity of this item. Defaults to 1 if not specified.',
           ),
-      })
+      }),
     )
     .describe(
-      'The extracted line items, their unit prices, and quantities from the bill.'
+      'The extracted line items, their unit prices, and quantities from the bill.',
     ),
   subtotal: z
     .number()
@@ -55,7 +55,7 @@ const ExtractBillItemsOutputSchema = z.object({
     .number()
     .optional()
     .describe(
-      'The service charge amount from the bill, if available.'
+      'The service charge amount from the bill, if available.',
     ),
   delivery: z
     .number()
@@ -68,9 +68,21 @@ export type ExtractBillItemsOutput = z.infer<
 >;
 
 export async function extractBillItems(
-  input: ExtractBillItemsInput
-): Promise<ExtractBillItemsOutput> {
-  return extractBillItemsFlow(input);
+  input: ExtractBillItemsInput,
+): Promise<
+  | {success: true; data: ExtractBillItemsOutput}
+  | {success: false; error: string}
+> {
+  try {
+    const data = await extractBillItemsFlow(input);
+    return {success: true, data};
+  } catch (err: any) {
+    console.error('extractBillItems error:', err);
+    return {
+      success: false,
+      error: err.message ?? 'Extraction failed',
+    };
+  }
 }
 
 const prompt = ai.definePrompt({
@@ -101,5 +113,5 @@ const extractBillItemsFlow = ai.defineFlow(
   async (input) => {
     const {output} = await prompt(input);
     return output!;
-  }
+  },
 );

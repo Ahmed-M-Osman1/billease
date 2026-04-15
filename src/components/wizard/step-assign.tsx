@@ -7,21 +7,27 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Checkbox } from '@/components/ui/checkbox'
+import { Label } from '@/components/ui/label'
 import { useToast } from '@/hooks/use-toast'
 import { useIsMobile } from '@/hooks/use-mobile'
 import { SHARED_ALL_PEOPLE } from '@/lib/constants'
 import { WizardNavigation } from './wizard-navigation'
-import { Sparkles, Loader2, RotateCcw, Users, User, Share2 } from 'lucide-react'
-import { useState } from 'react'
+import { Sparkles, Loader2, RotateCcw, Users, User, Share2, CheckCircle2 } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
 
 export function StepAssign() {
   const store = useBillStore()
   const { toast } = useToast()
   const isMobile = useIsMobile()
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null)
+  const [selectedAssigneeIds, setSelectedAssigneeIds] = useState<string[]>([])
 
   const unassignedItems = store.items.filter((item) => !item.assignedTo)
-  const sharedItems = store.items.filter((item) => item.assignedTo === SHARED_ALL_PEOPLE)
+  const selectedItem = useMemo(
+    () => store.items.find((item) => item.id === selectedItemId) ?? null,
+    [selectedItemId, store.items]
+  )
 
   const handleAISuggest = async () => {
     store.startSuggestion()
@@ -43,13 +49,44 @@ export function StepAssign() {
     setSelectedItemId(null)
   }
 
+  const getSelectedPersonIds = (assignedTo: string | null) => {
+    if (!assignedTo) return []
+    if (assignedTo === SHARED_ALL_PEOPLE) return store.people.map((person) => person.id)
+    const pool = store.customSharedPools.find((item) => item.id === assignedTo)
+    if (pool) return pool.personIds
+    return [assignedTo]
+  }
+
+  useEffect(() => {
+    if (!selectedItem) {
+      setSelectedAssigneeIds([])
+      return
+    }
+
+    setSelectedAssigneeIds(getSelectedPersonIds(selectedItem.assignedTo))
+  }, [selectedItemId, selectedItem])
+
+  const toggleAssignee = (personId: string) => {
+    setSelectedAssigneeIds((current) =>
+      current.includes(personId)
+        ? current.filter((id) => id !== personId)
+        : [...current, personId]
+    )
+  }
+
+  const handleApplyMultiAssign = () => {
+    if (!selectedItemId) return
+    store.assignItemToPeople(selectedItemId, selectedAssigneeIds)
+    setSelectedItemId(null)
+  }
+
   const getAssigneeName = (assignedTo: string | null) => {
     if (!assignedTo) return null
     if (assignedTo === SHARED_ALL_PEOPLE) return 'Shared (All)'
     const person = store.people.find((p) => p.id === assignedTo)
     if (person) return person.name
     const pool = store.customSharedPools.find((p) => p.id === assignedTo)
-    if (pool) return pool.name
+    if (pool) return `${pool.personIds.length} people`
     return null
   }
 
@@ -124,7 +161,12 @@ export function StepAssign() {
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium truncate">{item.name || 'Unnamed item'}</p>
                   {assigneeName && (
-                    <p className="text-xs text-muted-foreground">{assigneeName}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {assigneeName}
+                      {item.assignedTo && store.customSharedPools.find((pool) => pool.id === item.assignedTo) && (
+                        <> · tap to edit members</>
+                      )}
+                    </p>
                   )}
                 </div>
                 <span className="text-sm font-semibold tabular-nums">
@@ -141,10 +183,10 @@ export function StepAssign() {
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>
-              Assign: {store.items.find((i) => i.id === selectedItemId)?.name}
+              Assign: {selectedItem?.name}
             </DialogTitle>
           </DialogHeader>
-          <div className="space-y-2">
+          <div className="space-y-4">
             <Button
               variant="outline"
               className="w-full justify-start gap-2"
@@ -165,35 +207,60 @@ export function StepAssign() {
               </div>
               Shared (All People)
             </Button>
-            {store.customSharedPools.map((pool) => (
-              <Button
-                key={pool.id}
-                variant="outline"
-                className="w-full justify-start gap-2"
-                onClick={() => handleAssign(selectedItemId!, pool.id)}
-              >
-                <div className="h-6 w-6 rounded-full bg-violet-100 dark:bg-violet-900 flex items-center justify-center">
-                  <Users className="h-3 w-3 text-violet-600" />
+            <div className="rounded-xl border p-3">
+              <div className="mb-3 flex items-start justify-between gap-3">
+                <div>
+                  <Label className="text-sm font-medium">Split between specific people</Label>
+                  <p className="text-xs text-muted-foreground">
+                    Pick one person or several. We&apos;ll split the item evenly between them.
+                  </p>
                 </div>
-                {pool.name}
-              </Button>
-            ))}
-            {store.people.map((person) => (
-              <Button
-                key={person.id}
-                variant="outline"
-                className="w-full justify-start gap-2"
-                onClick={() => handleAssign(selectedItemId!, person.id)}
-              >
-                <div
-                  className="h-6 w-6 rounded-full flex items-center justify-center text-white text-[10px] font-bold"
-                  style={{ backgroundColor: person.color }}
+                <Badge variant="secondary">
+                  {selectedAssigneeIds.length} selected
+                </Badge>
+              </div>
+
+              <div className="space-y-2">
+                {store.people.map((person) => (
+                  <label
+                    key={person.id}
+                    className="flex cursor-pointer items-center gap-3 rounded-lg border px-3 py-2 transition-colors hover:bg-muted/40"
+                  >
+                    <Checkbox
+                      checked={selectedAssigneeIds.includes(person.id)}
+                      onCheckedChange={() => toggleAssignee(person.id)}
+                    />
+                    <div
+                      className="flex h-7 w-7 items-center justify-center rounded-full text-[10px] font-bold text-white"
+                      style={{ backgroundColor: person.color }}
+                    >
+                      {person.name[0]}
+                    </div>
+                    <span className="flex-1 text-sm">{person.name}</span>
+                    {selectedAssigneeIds.includes(person.id) && (
+                      <CheckCircle2 className="h-4 w-4 text-primary" />
+                    )}
+                  </label>
+                ))}
+              </div>
+
+              <div className="mt-3 flex gap-2">
+                <Button
+                  className="flex-1"
+                  onClick={handleApplyMultiAssign}
+                  disabled={selectedAssigneeIds.length === 0}
                 >
-                  {person.name[0]}
-                </div>
-                {person.name}
-              </Button>
-            ))}
+                  Apply Selection
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => setSelectedAssigneeIds([])}
+                  disabled={selectedAssigneeIds.length === 0}
+                >
+                  Clear
+                </Button>
+              </div>
+            </div>
           </div>
         </DialogContent>
       </Dialog>

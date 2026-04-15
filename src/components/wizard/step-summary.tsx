@@ -2,8 +2,8 @@
 
 import { useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { useBillStore } from '@/stores/bill-store'
-import { useAuthStore } from '@/stores/auth-store'
 import { calculatePersonSummaries } from '@/lib/calculations'
 import { getCurrencySymbol } from '@/lib/constants'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -15,11 +15,16 @@ import { BillChart } from './bill-chart'
 import { ExportActions } from './export-actions'
 import { WizardNavigation } from './wizard-navigation'
 import { useToast } from '@/hooks/use-toast'
-import { Save, Loader2, PlusCircle } from 'lucide-react'
+import { Save, Loader2, PlusCircle, LockKeyhole } from 'lucide-react'
 
-export function StepSummary() {
+type StepSummaryProps = {
+  mode?: 'authenticated' | 'guest'
+}
+
+export function StepSummary({
+  mode = 'authenticated',
+}: StepSummaryProps) {
   const store = useBillStore()
-  const { user } = useAuthStore()
   const router = useRouter()
   const { toast } = useToast()
   const [saving, setSaving] = useState(false)
@@ -75,7 +80,7 @@ export function StepSummary() {
 
   const handleNewBill = () => {
     store.resetAll()
-    router.push('/bill/new')
+    router.push(mode === 'guest' ? '/guest' : '/bill/new')
   }
 
   return (
@@ -156,19 +161,44 @@ export function StepSummary() {
           billTitle={store.billTitle}
           captureRef={captureRef}
         />
+        {mode === 'guest' && (
+          <Card className="w-full border-dashed bg-muted/20 lg:flex-1">
+            <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2 text-sm font-medium">
+                  <LockKeyhole className="h-4 w-4 text-primary" />
+                  Save and sharing need an account
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  Your guest bill stays on this device. Sign in to save it to history and create a collaboration link.
+                </p>
+              </div>
+              <div className="flex gap-2">
+                <Button asChild variant="outline">
+                  <Link href="/auth/login?callbackUrl=/bill/new">Sign in</Link>
+                </Button>
+                <Button asChild>
+                  <Link href="/auth/signup?callbackUrl=/bill/new">Create account</Link>
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
         <div className="ml-auto flex gap-2">
           <Button variant="outline" onClick={handleNewBill}>
             <PlusCircle className="h-4 w-4 mr-1" />
             New Bill
           </Button>
-          <Button onClick={handleSave} disabled={saving}>
-            {saving ? (
-              <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-            ) : (
-              <Save className="h-4 w-4 mr-1" />
-            )}
-            Save Bill
-          </Button>
+          {mode === 'authenticated' && (
+            <Button onClick={handleSave} disabled={saving}>
+              {saving ? (
+                <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+              ) : (
+                <Save className="h-4 w-4 mr-1" />
+              )}
+              Save Bill
+            </Button>
+          )}
         </div>
       </div>
 
