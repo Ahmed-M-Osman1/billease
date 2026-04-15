@@ -7,7 +7,6 @@
  * - SuggestItemAssignmentOutput - The return type for the suggestItemAssignment function.
  */
 
-import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
 
 const SuggestItemAssignmentInputSchema = z.object({
@@ -34,14 +33,13 @@ export type SuggestItemAssignmentOutput = z.infer<
 export async function suggestItemAssignment(
   input: SuggestItemAssignmentInput
 ): Promise<SuggestItemAssignmentOutput> {
-  return suggestItemAssignmentFlow(input);
-}
+  const {ai} = await import('@/ai/genkit');
 
-const prompt = ai.definePrompt({
-  name: 'suggestItemAssignmentPrompt',
-  input: {schema: SuggestItemAssignmentInputSchema},
-  output: {schema: SuggestItemAssignmentOutputSchema},
-  prompt: `You are an expert bill splitter. You know which person ordered
+  const prompt = ai.definePrompt({
+    name: 'suggestItemAssignmentPrompt',
+    input: {schema: SuggestItemAssignmentInputSchema},
+    output: {schema: SuggestItemAssignmentOutputSchema},
+    prompt: `You are an expert bill splitter. You know which person ordered
   which items on the bill.
 
   Suggest which person should be assigned which items on the bill based on
@@ -53,16 +51,8 @@ const prompt = ai.definePrompt({
 
   Return a JSON object mapping each item to a person.
   `,
-});
+  });
 
-const suggestItemAssignmentFlow = ai.defineFlow(
-  {
-    name: 'suggestItemAssignmentFlow',
-    inputSchema: SuggestItemAssignmentInputSchema,
-    outputSchema: SuggestItemAssignmentOutputSchema,
-  },
-  async input => {
-    const {output} = await prompt(input);
-    return output!;
-  }
-);
+  const {output} = await prompt(input);
+  return output!;
+}

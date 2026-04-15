@@ -8,14 +8,13 @@
  * - ExtractBillItemsOutput - The return type for the extractBillItems function.
  */
 
-import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
 
 const ExtractBillItemsInputSchema = z.object({
   photoDataUri: z
     .string()
     .describe(
-      "A photo of a restaurant bill, as a data URI that must include a MIME type and use Base64 encoding. Expected format: 'data:<mimetype>;base64,<encoded_data>'."
+      "A photo of a restaurant bill, as a data URI that must include a MIME type and use Base64 encoding. Expected format: 'data:<mimetype>;base64,<encoded_data>'.",
     ),
 });
 export type ExtractBillItemsInput = z.infer<
@@ -30,18 +29,18 @@ const ExtractBillItemsOutputSchema = z.object({
         price: z
           .number()
           .describe(
-            'The unit price of the item. If a quantity is specified, this should be the price for a single item.'
+            'The unit price of the item. If a quantity is specified, this should be the price for a single item.',
           ),
         quantity: z
           .number()
           .optional()
           .describe(
-            'The quantity of this item. Defaults to 1 if not specified.'
+            'The quantity of this item. Defaults to 1 if not specified.',
           ),
-      })
+      }),
     )
     .describe(
-      'The extracted line items, their unit prices, and quantities from the bill.'
+      'The extracted line items, their unit prices, and quantities from the bill.',
     ),
   subtotal: z
     .number()
@@ -55,7 +54,7 @@ const ExtractBillItemsOutputSchema = z.object({
     .number()
     .optional()
     .describe(
-      'The service charge amount from the bill, if available.'
+      'The service charge amount from the bill, if available.',
     ),
   delivery: z
     .number()
@@ -68,17 +67,20 @@ export type ExtractBillItemsOutput = z.infer<
 >;
 
 export async function extractBillItems(
-  input: ExtractBillItemsInput
-): Promise<ExtractBillItemsOutput> {
-  return extractBillItemsFlow(input);
-}
+  input: ExtractBillItemsInput,
+): Promise<
+  | {success: true; data: ExtractBillItemsOutput}
+  | {success: false; error: string}
+> {
+  try {
+    const {ai} = await import('@/ai/genkit');
 
-const prompt = ai.definePrompt({
-  name: 'extractBillItemsPrompt',
-  model: 'googleai/gemini-2.5-flash-lite',
-  input: {schema: ExtractBillItemsInputSchema},
-  output: {schema: ExtractBillItemsOutputSchema},
-  prompt: `You are an expert OCR reader and data extractor for restaurant bills.
+    const prompt = ai.definePrompt({
+      name: 'extractBillItemsPrompt',
+      model: 'googleai/gemini-2.5-flash-lite',
+      input: {schema: ExtractBillItemsInputSchema},
+      output: {schema: ExtractBillItemsOutputSchema},
+      prompt: `You are an expert OCR reader and data extractor for restaurant bills.
 
 You will receive a photo of a bill and you will extract all line items, their names, their *unit prices*, and quantities.
 If an item has a quantity (e.g., "2x Fries" or "Fries ..... 2 ..... $price_each"), please return the item name as "Fries", its quantity as 2, and the price for a *single unit* of Fries.
@@ -90,16 +92,15 @@ Return the data in JSON format. If a value is not present in the image, omit it 
 
 Bill Image: {{media url=photoDataUri}}
 `,
-});
+    });
 
-const extractBillItemsFlow = ai.defineFlow(
-  {
-    name: 'extractBillItemsFlow',
-    inputSchema: ExtractBillItemsInputSchema,
-    outputSchema: ExtractBillItemsOutputSchema,
-  },
-  async (input) => {
     const {output} = await prompt(input);
-    return output!;
+    return {success: true, data: output!};
+  } catch (err: any) {
+    console.error('extractBillItems error:', err);
+    return {
+      success: false,
+      error: err.message ?? 'Extraction failed',
+    };
   }
-);
+}
