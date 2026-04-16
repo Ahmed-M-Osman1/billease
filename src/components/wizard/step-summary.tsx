@@ -1,40 +1,45 @@
-'use client'
+'use client';
 
-import { useMemo, useRef, useState } from 'react'
-import { useRouter } from 'next/navigation'
-import Link from 'next/link'
-import { useBillStore } from '@/stores/bill-store'
-import { calculatePersonSummaries } from '@/lib/calculations'
-import { getCurrencySymbol } from '@/lib/constants'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Separator } from '@/components/ui/separator'
-import { PersonSummaryCard } from './person-summary-card'
-import { TipCalculator } from './tip-calculator'
-import { BillChart } from './bill-chart'
-import { ExportActions } from './export-actions'
-import { ExportTable } from './export-table'
-import { WizardNavigation } from './wizard-navigation'
-import { useToast } from '@/hooks/use-toast'
-import { Save, Loader2, PlusCircle, LockKeyhole } from 'lucide-react'
+import {useMemo, useRef, useState} from 'react';
+import {useRouter} from 'next/navigation';
+import Link from 'next/link';
+import {useBillStore} from '@/stores/bill-store';
+import {calculatePersonSummaries} from '@/lib/calculations';
+import {getCurrencySymbol} from '@/lib/constants';
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card';
+import {Button} from '@/components/ui/button';
+import {Input} from '@/components/ui/input';
+import {Label} from '@/components/ui/label';
+import {Separator} from '@/components/ui/separator';
+import {PersonSummaryCard} from './person-summary-card';
+import {TipCalculator} from './tip-calculator';
+import {BillChart} from './bill-chart';
+import {ExportActions} from './export-actions';
+import {ExportTable} from './export-table';
+import {WizardNavigation} from './wizard-navigation';
+import {useToast} from '@/hooks/use-toast';
+import {Save, Loader2, PlusCircle, LockKeyhole} from 'lucide-react';
 
 type StepSummaryProps = {
-  mode?: 'authenticated' | 'guest'
-}
+  mode?: 'authenticated' | 'guest';
+};
 
 export function StepSummary({
   mode = 'authenticated',
 }: StepSummaryProps) {
-  const store = useBillStore()
-  const router = useRouter()
-  const { toast } = useToast()
-  const [saving, setSaving] = useState(false)
-  const captureRef = useRef<HTMLDivElement>(null)
-  const exportTableRef = useRef<HTMLDivElement>(null)
+  const store = useBillStore();
+  const router = useRouter();
+  const {toast} = useToast();
+  const [saving, setSaving] = useState(false);
+  const captureRef = useRef<HTMLDivElement>(null);
+  const exportTableRef = useRef<HTMLDivElement>(null);
 
-  const { summaries, grandTotal } = useMemo(
+  const {summaries, grandTotal} = useMemo(
     () =>
       calculatePersonSummaries({
         items: store.items,
@@ -44,17 +49,24 @@ export function StepSummary({
         tipAmount: store.tipAmount,
         tipMode: store.tipMode,
       }),
-    [store.items, store.people, store.billDetails, store.customSharedPools, store.tipAmount, store.tipMode]
-  )
+    [
+      store.items,
+      store.people,
+      store.billDetails,
+      store.customSharedPools,
+      store.tipAmount,
+      store.tipMode,
+    ],
+  );
 
-  const sym = getCurrencySymbol(store.currency)
+  const sym = getCurrencySymbol(store.currency);
 
   const handleSave = async () => {
-    setSaving(true)
+    setSaving(true);
     try {
       const res = await fetch('/api/bills', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({
           title: store.billTitle,
           date: store.billDate,
@@ -69,23 +81,27 @@ export function StepSummary({
           people: store.people,
           customSharedPools: store.customSharedPools,
         }),
-      })
-      const bill = await res.json()
-      if (!res.ok) throw new Error(bill.error ?? 'Save failed')
-      toast({ title: 'Bill saved!' })
-      store.resetAll()
-      router.push(`/bill/${bill.id}`)
+      });
+      const bill = await res.json();
+      if (!res.ok) throw new Error(bill.error ?? 'Save failed');
+      toast({title: 'Bill saved!'});
+      store.resetAll();
+      router.push(`/bill/${bill.id}`);
     } catch (err: any) {
-      toast({ variant: 'destructive', title: 'Failed to save', description: err.message })
+      toast({
+        variant: 'destructive',
+        title: 'Failed to save',
+        description: err.message,
+      });
     } finally {
-      setSaving(false)
+      setSaving(false);
     }
-  }
+  };
 
   const handleNewBill = () => {
-    store.resetAll()
-    router.push(mode === 'guest' ? '/guest' : '/bill/new')
-  }
+    store.resetAll();
+    router.push(mode === 'guest' ? '/guest' : '/bill/new');
+  };
 
   return (
     <div className="space-y-6">
@@ -97,10 +113,15 @@ export function StepSummary({
       {summaries.length > 0 && (
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm">Bill Distribution</CardTitle>
+            <CardTitle className="text-sm">
+              Bill Distribution
+            </CardTitle>
           </CardHeader>
           <CardContent>
-            <BillChart summaries={summaries} currency={store.currency} />
+            <BillChart
+              summaries={summaries}
+              currency={store.currency}
+            />
           </CardContent>
         </Card>
       )}
@@ -129,7 +150,9 @@ export function StepSummary({
                   type="number"
                   value={store.billDetails.subtotal || ''}
                   onChange={(e) =>
-                    store.updateBillDetails({ subtotal: parseFloat(e.target.value) || 0 })
+                    store.updateBillDetails({
+                      subtotal: parseFloat(e.target.value) || 0,
+                    })
                   }
                   className="text-right h-8 text-sm"
                 />
@@ -140,7 +163,9 @@ export function StepSummary({
                   type="number"
                   value={store.billDetails.vat || ''}
                   onChange={(e) =>
-                    store.updateBillDetails({ vat: parseFloat(e.target.value) || 0 })
+                    store.updateBillDetails({
+                      vat: parseFloat(e.target.value) || 0,
+                    })
                   }
                   className="text-right h-8 text-sm"
                 />
@@ -151,7 +176,9 @@ export function StepSummary({
                   type="number"
                   value={store.billDetails.serviceCharge || ''}
                   onChange={(e) =>
-                    store.updateBillDetails({ serviceCharge: parseFloat(e.target.value) || 0 })
+                    store.updateBillDetails({
+                      serviceCharge: parseFloat(e.target.value) || 0,
+                    })
                   }
                   className="text-right h-8 text-sm"
                 />
@@ -162,7 +189,9 @@ export function StepSummary({
                   type="number"
                   value={store.billDetails.delivery || ''}
                   onChange={(e) =>
-                    store.updateBillDetails({ delivery: parseFloat(e.target.value) || 0 })
+                    store.updateBillDetails({
+                      delivery: parseFloat(e.target.value) || 0,
+                    })
                   }
                   className="text-right h-8 text-sm"
                 />
@@ -171,7 +200,9 @@ export function StepSummary({
             <Separator />
             <div className="flex justify-between font-bold text-base">
               <span>Grand Total</span>
-              <span className="text-primary">{sym} {grandTotal.toFixed(2)}</span>
+              <span className="text-primary">
+                {sym} {grandTotal.toFixed(2)}
+              </span>
             </div>
           </CardContent>
         </Card>
@@ -204,15 +235,20 @@ export function StepSummary({
                   Save and sharing need an account
                 </div>
                 <p className="text-sm text-muted-foreground">
-                  Your guest bill stays on this device. Sign in to save it to history and create a collaboration link.
+                  Your guest bill stays on this device. Sign in to
+                  save it to history and create a collaboration link.
                 </p>
               </div>
               <div className="flex gap-2">
                 <Button asChild variant="outline">
-                  <Link href="/auth/login?callbackUrl=/bill/new">Sign in</Link>
+                  <Link href="/auth/login?callbackUrl=/bill/new">
+                    Sign in
+                  </Link>
                 </Button>
                 <Button asChild>
-                  <Link href="/auth/signup?callbackUrl=/bill/new">Create account</Link>
+                  <Link href="/auth/signup?callbackUrl=/bill/new">
+                    Create account
+                  </Link>
                 </Button>
               </div>
             </CardContent>
@@ -243,5 +279,5 @@ export function StepSummary({
         onNext={() => {}}
       />
     </div>
-  )
+  );
 }
