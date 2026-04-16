@@ -219,7 +219,7 @@ export function StepUpload() {
               Add item
             </Button>
           </div>
-          <ScrollArea className="max-h-64">
+          <ScrollArea className="h-[min(24rem,50vh)]">
             <div className="space-y-2">
               {store.items.map((item) => (
                 <div

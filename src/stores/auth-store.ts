@@ -1,6 +1,13 @@
 import { create } from 'zustand'
 import type { Profile } from '@/lib/types'
-import type { User } from '@supabase/supabase-js'
+
+// Minimal user shape — compatible with next-auth session.user
+interface User {
+  id?: string
+  name?: string | null
+  email?: string | null
+  image?: string | null
+}
 
 interface AuthStoreState {
   user: User | null

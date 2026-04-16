@@ -79,7 +79,10 @@ export function BillUploadForm() {
       const result = await extractBillItems({
         photoDataUri: state.billImageDataUri,
       });
-      dispatch({type: 'OCR_SUCCESS', payload: result});
+      if (!result.success) {
+        throw new Error(result.error);
+      }
+      dispatch({type: 'OCR_SUCCESS', payload: result.data});
       toast({
         title: 'OCR Successful',
         description: 'Items extracted from the bill.',

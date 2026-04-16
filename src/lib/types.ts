@@ -48,7 +48,7 @@ export interface CalculatedPersonSummary extends Person {
 
 export type BillStatus = 'draft' | 'active' | 'settled';
 export type TipMode = 'none' | 'pre_tax' | 'post_tax';
-export type WizardStep = 0 | 1 | 2 | 3;
+export type WizardStep = 0 | 1 | 2;
 export type AssignmentType = 'individual' | 'shared_all' | 'shared_group';
 export type ThemePreference = 'light' | 'dark' | 'system';
 export type OcrPriceMode = 'unit' | 'total';

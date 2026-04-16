@@ -176,8 +176,8 @@ export const useBillStore = create<BillStoreState & BillStoreActions>()(
       ...initialState,
 
       // Wizard
-      setStep: (step) => set({ currentStep: step }),
-      nextStep: () => set((s) => ({ currentStep: Math.min(s.currentStep + 1, 3) as WizardStep })),
+      setStep: (step) => set({ currentStep: Math.min(Math.max(step, 0), 2) as WizardStep }),
+      nextStep: () => set((s) => ({ currentStep: Math.min(s.currentStep + 1, 2) as WizardStep })),
       prevStep: () => set((s) => ({ currentStep: Math.max(s.currentStep - 1, 0) as WizardStep })),
 
       // Metadata

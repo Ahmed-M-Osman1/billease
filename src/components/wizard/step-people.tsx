@@ -187,6 +187,17 @@ export function StepPeople() {
         <p className="text-sm text-amber-600">Add at least 2 people to continue</p>
       )}
 
+      <div className="flex justify-center">
+        <Button
+          variant="ghost"
+          size="sm"
+          className="text-muted-foreground text-xs"
+          onClick={() => store.setStep(2)}
+        >
+          Skip — everyone pays for what they ordered
+        </Button>
+      </div>
+
       <WizardNavigation
         canGoBack={true}
         canGoNext={canProceed}

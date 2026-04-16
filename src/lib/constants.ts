@@ -27,9 +27,8 @@ export const PERSON_COLORS = [
 
 export const WIZARD_STEPS = [
   { index: 0, label: 'Upload', description: 'Upload & extract bill items' },
-  { index: 1, label: 'People', description: 'Add people & groups' },
-  { index: 2, label: 'Assign', description: 'Assign items to people' },
-  { index: 3, label: 'Summary', description: 'Review & share' },
+  { index: 1, label: 'People', description: 'Add people to the bill' },
+  { index: 2, label: 'Share', description: 'Share links & everyone claims their items' },
 ] as const;
 
 export const SHARED_ALL_PEOPLE = 'SHARED_ALL_PEOPLE' as const;

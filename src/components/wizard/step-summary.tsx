@@ -8,11 +8,14 @@ import { calculatePersonSummaries } from '@/lib/calculations'
 import { getCurrencySymbol } from '@/lib/constants'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { Separator } from '@/components/ui/separator'
 import { PersonSummaryCard } from './person-summary-card'
 import { TipCalculator } from './tip-calculator'
 import { BillChart } from './bill-chart'
 import { ExportActions } from './export-actions'
+import { ExportTable } from './export-table'
 import { WizardNavigation } from './wizard-navigation'
 import { useToast } from '@/hooks/use-toast'
 import { Save, Loader2, PlusCircle, LockKeyhole } from 'lucide-react'
@@ -29,6 +32,7 @@ export function StepSummary({
   const { toast } = useToast()
   const [saving, setSaving] = useState(false)
   const captureRef = useRef<HTMLDivElement>(null)
+  const exportTableRef = useRef<HTMLDivElement>(null)
 
   const { summaries, grandTotal } = useMemo(
     () =>
@@ -115,39 +119,59 @@ export function StepSummary({
           ))}
         </div>
 
-        {/* Totals */}
+        {/* Editable Totals */}
         <Card className="bg-muted/30">
-          <CardContent className="p-4">
-            <div className="space-y-1 text-sm">
-              <div className="flex justify-between">
-                <span>Subtotal</span>
-                <span>{sym} {store.billDetails.subtotal.toFixed(2)}</span>
+          <CardContent className="p-4 space-y-3">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div className="space-y-1">
+                <Label className="text-xs">Subtotal</Label>
+                <Input
+                  type="number"
+                  value={store.billDetails.subtotal || ''}
+                  onChange={(e) =>
+                    store.updateBillDetails({ subtotal: parseFloat(e.target.value) || 0 })
+                  }
+                  className="text-right h-8 text-sm"
+                />
               </div>
-              <div className="flex justify-between">
-                <span>VAT</span>
-                <span>{sym} {store.billDetails.vat.toFixed(2)}</span>
+              <div className="space-y-1">
+                <Label className="text-xs">VAT</Label>
+                <Input
+                  type="number"
+                  value={store.billDetails.vat || ''}
+                  onChange={(e) =>
+                    store.updateBillDetails({ vat: parseFloat(e.target.value) || 0 })
+                  }
+                  className="text-right h-8 text-sm"
+                />
               </div>
-              <div className="flex justify-between">
-                <span>Service</span>
-                <span>{sym} {store.billDetails.serviceCharge.toFixed(2)}</span>
+              <div className="space-y-1">
+                <Label className="text-xs">Service</Label>
+                <Input
+                  type="number"
+                  value={store.billDetails.serviceCharge || ''}
+                  onChange={(e) =>
+                    store.updateBillDetails({ serviceCharge: parseFloat(e.target.value) || 0 })
+                  }
+                  className="text-right h-8 text-sm"
+                />
               </div>
-              {store.billDetails.delivery > 0 && (
-                <div className="flex justify-between">
-                  <span>Delivery</span>
-                  <span>{sym} {store.billDetails.delivery.toFixed(2)}</span>
-                </div>
-              )}
-              {store.tipAmount > 0 && (
-                <div className="flex justify-between">
-                  <span>Tip</span>
-                  <span>{sym} {store.tipAmount.toFixed(2)}</span>
-                </div>
-              )}
-              <Separator className="my-2" />
-              <div className="flex justify-between font-bold text-base">
-                <span>Grand Total</span>
-                <span className="text-primary">{sym} {grandTotal.toFixed(2)}</span>
+              <div className="space-y-1">
+                <Label className="text-xs">Delivery</Label>
+                <Input
+                  type="number"
+                  value={store.billDetails.delivery || ''}
+                  onChange={(e) =>
+                    store.updateBillDetails({ delivery: parseFloat(e.target.value) || 0 })
+                  }
+                  className="text-right h-8 text-sm"
+                />
               </div>
+            </div>
+            <Separator />
+            <div className="flex justify-between font-bold text-base">
+              <span>Grand Total</span>
+              <span className="text-primary">{sym} {grandTotal.toFixed(2)}</span>
             </div>
           </CardContent>
         </Card>
@@ -159,7 +183,17 @@ export function StepSummary({
           summaries={summaries}
           currency={store.currency}
           billTitle={store.billTitle}
-          captureRef={captureRef}
+          captureRef={exportTableRef}
+        />
+        <ExportTable
+          ref={exportTableRef}
+          summaries={summaries}
+          currency={store.currency}
+          billTitle={store.billTitle}
+          grandTotal={grandTotal}
+          billDetails={store.billDetails}
+          tipAmount={store.tipAmount}
+          people={store.people}
         />
         {mode === 'guest' && (
           <Card className="w-full border-dashed bg-muted/20 lg:flex-1">

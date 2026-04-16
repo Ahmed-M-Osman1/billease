@@ -18,15 +18,22 @@ export function ExportActions({ summaries, currency, billTitle, captureRef }: Ex
   const { toast } = useToast()
   const sym = getCurrencySymbol(currency)
 
+  const generatePNG = async (): Promise<Blob | null> => {
+    if (!captureRef.current) return null
+    const html2canvas = (await import('html2canvas')).default
+    const canvas = await html2canvas(captureRef.current, { scale: 2 })
+    return new Promise((resolve) => canvas.toBlob((blob) => resolve(blob), 'image/png'))
+  }
+
   const handlePNG = async () => {
-    if (!captureRef.current) return
     try {
-      const html2canvas = (await import('html2canvas')).default
-      const canvas = await html2canvas(captureRef.current, { scale: 2 })
+      const blob = await generatePNG()
+      if (!blob) return
       const link = document.createElement('a')
       link.download = `${billTitle || 'bill'}-summary.png`
-      link.href = canvas.toDataURL('image/png')
+      link.href = URL.createObjectURL(blob)
       link.click()
+      URL.revokeObjectURL(link.href)
       toast({ title: 'PNG downloaded' })
     } catch {
       toast({ variant: 'destructive', title: 'Export failed' })
@@ -42,7 +49,23 @@ export function ExportActions({ summaries, currency, billTitle, captureRef }: Ex
     toast({ title: 'Copied to clipboard' })
   }
 
-  const handleWhatsApp = () => {
+  const handleWhatsApp = async () => {
+    try {
+      const blob = await generatePNG()
+      if (blob && navigator.canShare?.({ files: [new File([blob], 'summary.png', { type: 'image/png' })] })) {
+        const file = new File([blob], `${billTitle || 'bill'}-summary.png`, { type: 'image/png' })
+        await navigator.share({
+          files: [file],
+          title: `${billTitle || 'Bill'} Summary`,
+        })
+        toast({ title: 'Shared' })
+        return
+      }
+    } catch (err: any) {
+      // User cancelled or share failed — fall through to text share
+      if (err?.name === 'AbortError') return
+    }
+    // Fallback: share as text via WhatsApp link
     const text = summaries
       .map((s) => `• ${s.name}: ${sym} ${s.totalDue.toFixed(2)}`)
       .join('\n')
